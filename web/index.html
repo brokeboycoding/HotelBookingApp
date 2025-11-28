@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <base href="$FLUTTER_BASE_HREF">
+
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="description" content="Hotel Booking App">
+
+    <!-- Google Sign-In -->
+    <meta name="google-signin-client_id"
+          content="907584919152-dfa83epkdfjcgk2heovoi8rjgfrrkk4r.apps.googleusercontent.com">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="quan_li_dat_phong">
+
+    <link rel="apple-touch-icon" href="icons/Icon-192.png">
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="manifest" href="manifest.json" />
+
+    <title>quan_li_dat_phong</title>
+</head>
+
+<body>
+
+<!-- ⭐ Firebase Web SDK -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+    import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+    import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBA-kUmGT1-20wQuIPEyK2KdrFhdSKXDso",
+      authDomain: "quanlidatphongks.firebaseapp.com",
+      projectId: "quanlidatphongks",
+      storageBucket: "quanlidatphongks.firebasestorage.app",
+      messagingSenderId: "907584919152",
+      appId: "1:907584919152:web:7e0648788761124f3f06b5",
+      measurementId: "G-TS130Z8KRL",
+    };
+
+    initializeApp(firebaseConfig);
+</script>
+
+<!-- ⭐ KHÔNG BAO GIỜ XOÁ! -->
+<script src="flutter_bootstrap.js" async></script>
+
+</body>
+
+</html>

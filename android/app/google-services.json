@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "907584919152",
+    "project_id": "quanlidatphongks",
+    "storage_bucket": "quanlidatphongks.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:907584919152:android:f535004686644f563f06b5",
+        "android_client_info": {
+          "package_name": "com.quanlidatphong.quan_li_dat_phong"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "907584919152-glsir8bc56ra1nghm6osqma2259rfve4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.quanlidatphong.quan_li_dat_phong",
+            "certificate_hash": "8e56e01fe18dd15108350b0d8a2c66472023aaa4"
+          }
+        },
+        {
+          "client_id": "907584919152-dfa83epkdfjcgk2heovoi8rjgfrrkk4r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5vLbpNx12FV4EgaHS_IBlu7tqvnZpUrc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "907584919152-dfa83epkdfjcgk2heovoi8rjgfrrkk4r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
