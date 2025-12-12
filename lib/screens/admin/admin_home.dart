@@ -9,6 +9,9 @@ import 'user_management_screen.dart';
 import '../../sample_data.dart';
 import '../login/login_screen.dart';
 
+// 🔁 Dùng màn hồ sơ dùng chung
+import '../user_profile_screen.dart';
+
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key});
 
@@ -93,6 +96,21 @@ class _AdminHomeState extends State<AdminHome> {
               ),
             ),
 
+            // ⭐ MỤC HỒ SƠ ADMIN → dùng UserProfileScreen
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text("Hồ sơ Admin"),
+              onTap: () {
+                Navigator.pop(context); // đóng drawer
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UserProfileScreen(),
+                  ),
+                );
+              },
+            ),
+
             ListTile(
               leading: const Icon(Icons.meeting_room),
               title: const Text("Quản lý phòng"),
@@ -141,8 +159,10 @@ class _AdminHomeState extends State<AdminHome> {
 
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title:
-              const Text("Đăng xuất", style: TextStyle(color: Colors.red)),
+              title: const Text(
+                "Đăng xuất",
+                style: TextStyle(color: Colors.red),
+              ),
               onTap: logout,
             ),
           ],

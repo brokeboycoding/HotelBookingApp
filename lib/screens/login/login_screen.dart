@@ -159,20 +159,40 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "Chào mừng trở lại!",
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
+                // 🔙 NÚT QUAY LẠI TRANG TRƯỚC
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context); // quay lại màn trước (trang gọi Login)
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text("Quay lại"),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.blueAccent,
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                // Tiêu đề căn giữa
+                const Center(
+                  child: Text(
+                    "Chào mừng trở lại!",
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  "Đăng nhập để tiếp tục",
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade600,
+                Center(
+                  child: Text(
+                    "Đăng nhập để tiếp tục",
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 30),
@@ -205,16 +225,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 24),
 
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const RegisterScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text("Chưa có tài khoản? Đăng ký ngay"),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text("Chưa có tài khoản? Đăng ký ngay"),
+                  ),
                 ),
 
                 const SizedBox(height: 12),
@@ -241,7 +263,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                const Text("Hoặc", style: TextStyle(fontSize: 15)),
+                const Center(
+                  child: Text("Hoặc", style: TextStyle(fontSize: 15)),
+                ),
                 const SizedBox(height: 20),
 
                 // GOOGLE LOGIN
