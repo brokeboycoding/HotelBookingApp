@@ -11,7 +11,7 @@ import 'screens/intro/splash_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/admin/admin_home.dart';
 import 'screens/owner/owner_home.dart';
-import 'screens/customer/customer_home.dart';
+import 'screens/customer/customer_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,7 +76,7 @@ class RoleWrapper extends StatelessWidget {
           case "owner":
             return const OwnerHome();
           case "customer":
-            return const CustomerHome();
+            return const CustomerShell();
           default:
             return const LoginScreen();
         }

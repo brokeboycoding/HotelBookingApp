@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../login/login_screen.dart';
 import '../login/register_screen.dart';
-
-// ⭐ IMPORT popup lịch mini
-import '../../widgets/calendar_popup.dart';
 
 class HomeBeforeLogin extends StatefulWidget {
   const HomeBeforeLogin({super.key});
@@ -15,349 +11,256 @@ class HomeBeforeLogin extends StatefulWidget {
 }
 
 class _HomeBeforeLoginState extends State<HomeBeforeLogin> {
-  final TextEditingController location =
-  TextEditingController(text: "Việt Nam");
+  final PageController _controller = PageController();
+  int _index = 0;
 
-  DateTime? checkIn;
-  DateTime? checkOut;
+  final _pages = const [
+    _OnboardData(
+      image: "assets/images/bb_anh1.png",
+      title: "Luxury and Comfort,\nJust a Tap Away",
+      desc:
+      "Semper in cursus magna et eu varius nunc adipiscing. Elementum justo, laoreet id sem.",
+      button: "Continue",
+      showRegister: false,
+    ),
+    _OnboardData(
+      image: "assets/images/bb_anh2.png",
+      title: "Book with Ease, Stay\nwith Style",
+      desc:
+      "Semper in cursus magna et eu varius nunc adipiscing. Elementum justo, laoreet id sem.",
+      button: "Continue",
+      showRegister: false,
+    ),
+    _OnboardData(
+      image: "assets/images/bb_anh3.png",
+      title: "Discover Your Dream\nHotel, Effortlessly",
+      desc:
+      "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
+      button: "Get Started",
+      showRegister: true,
+    ),
+  ];
 
-  int adults = 2;
-  int children = 0;
-  int rooms = 1;
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _next() {
+    if (_index < _pages.length - 1) {
+      _controller.animateToPage(
+        _index + 1,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOut,
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final bool isMobile = size.width < 600;
-    final double maxWidth = isMobile ? size.width : 700;
-
     return Scaffold(
-      backgroundColor: Colors.white,
-      // Cho phép nền tràn sau app bar nếu sau này dùng AppBar
-      extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
-          // NỀN ẢNH
-          Positioned.fill(
-            child: Image.asset(
-              "assets/images/bg_forest.png",
-              fit: BoxFit.cover,
-            ),
-          ),
+      body: PageView.builder(
+        controller: _controller,
+        itemCount: _pages.length,
+        onPageChanged: (i) => setState(() => _index = i),
+        itemBuilder: (_, i) {
+          final p = _pages[i];
+          return _OnboardPage(
+            data: p,
+            pageIndex: i,
+            currentIndex: _index,
+            total: _pages.length,
+            onNext: _next,
+          );
+        },
+      ),
+    );
+  }
+}
 
-          // LỚP GRADIENT TỐI
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.black.withValues(alpha: 0.75),
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.transparent,
-                  ],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                ),
+class _OnboardPage extends StatelessWidget {
+  final _OnboardData data;
+  final int pageIndex;
+  final int currentIndex;
+  final int total;
+  final VoidCallback onNext;
+
+  const _OnboardPage({
+    required this.data,
+    required this.pageIndex,
+    required this.currentIndex,
+    required this.total,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Ảnh nền
+        Positioned.fill(
+          child: Image.asset(
+            data.image,
+            fit: BoxFit.cover,
+          ),
+        ),
+
+        // Lớp tối ở dưới giống ảnh
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.85),
+                  Colors.black.withValues(alpha: 0.40),
+                  Colors.transparent,
+                ],
               ),
             ),
           ),
+        ),
 
-          // ⭐ NỘI DUNG CHÍNH (đặt TRƯỚC để không che header)
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Container(
-                constraints: BoxConstraints(maxWidth: maxWidth),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  children: [
-                    SizedBox(height: isMobile ? 120 : 150),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: [
+                const Spacer(),
 
-                    Text(
-                      "Trải nghiệm kỳ nghỉ tuyệt vời",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: isMobile ? 28 : 34,
-                        fontWeight: FontWeight.bold,
-                        height: 1.3,
-                        shadows: const [
-                          Shadow(color: Colors.black, blurRadius: 10),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    const Text(
-                      "Khách sạn – Resort – Villa – Combo du lịch giá tốt nhất",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 17,
-                        height: 1.3,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    _searchBox(isMobile: isMobile),
-
-                    const SizedBox(height: 50),
-                  ],
+                // Title
+                Text(
+                  data.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.15,
+                    shadows: [
+                      Shadow(color: Colors.black, blurRadius: 12),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          ),
+                const SizedBox(height: 10),
 
-          // ⭐ THANH TRÊN: LOGO + LOGIN / REGISTER (đặt CUỐI để nằm TRÊN cùng)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        "QuanLiDatPhong",
+                // Desc
+                Text(
+                  data.desc,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Dots
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(total, (i) {
+                    final active = i == currentIndex;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      height: 6,
+                      width: active ? 18 : 6,
+                      decoration: BoxDecoration(
+                        color: active ? const Color(0xFF2F64D6) : Colors.white54,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    );
+                  }),
+                ),
+
+                const SizedBox(height: 18),
+
+                // Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: onNext,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2F64D6),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      data.button,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Register line (chỉ trang cuối)
+                if (data.showRegister) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don’t have an account? ",
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: isMobile ? 22 : 24,
-                          fontWeight: FontWeight.bold,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              blurRadius: 8,
-                            ),
-                          ],
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 12.5,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            "Đăng ký",
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                          );
+                        },
+                        child: const Text(
+                          "Register",
+                          style: TextStyle(
+                            color: Color(0xFF2F64D6),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
                           ),
                         ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.blueAccent,
-                            elevation: 2,
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                            );
-                          },
-                          child: const Text("Đăng nhập"),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================
-  // SEARCH BOX
-  // ============================
-  Widget _searchBox({required bool isMobile}) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          TextField(
-            controller: location,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              labelText: "Bạn muốn đi đâu?",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // ⭐ LỊCH POPUP MINI
-          InkWell(
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (_) {
-                  return Center(
-                    child: CalendarPopup(
-                      onSelected: (start, end) {
-                        setState(() {
-                          checkIn = start;
-                          checkOut = end;
-                        });
-                      },
-                    ),
-                  );
-                },
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade400),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.calendar_month),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      checkIn == null || checkOut == null
-                          ? "Nhận phòng — Trả phòng"
-                          : "${DateFormat('dd/MM').format(checkIn!)}  →  ${DateFormat('dd/MM').format(checkOut!)}",
-                      style: const TextStyle(fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
+
+                const SizedBox(height: 22),
+              ],
             ),
           ),
-
-          const SizedBox(height: 14),
-
-          InkWell(
-            onTap: () => showModalBottomSheet(
-              context: context,
-              builder: (_) => _guestSelector(),
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade400),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.people),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "$adults người lớn · $children trẻ em · $rooms phòng",
-                      style: const TextStyle(fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () {
-                // TODO: Sau này điều hướng sang màn kết quả tìm kiếm
-              },
-              child: const Text(
-                "Tìm kiếm",
-                style: TextStyle(fontSize: 18),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  // ============================
-  // POPUP CHỌN KHÁCH
-  // ============================
-  Widget _guestSelector() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      height: 300,
-      child: Column(
-        children: [
-          _numberRow("Người lớn", adults, (v) => setState(() => adults = v)),
-          _numberRow("Trẻ em", children, (v) => setState(() => children = v)),
-          _numberRow("Phòng", rooms, (v) => setState(() => rooms = v)),
-        ],
-      ),
-    );
-  }
+class _OnboardData {
+  final String image;
+  final String title;
+  final String desc;
+  final String button;
+  final bool showRegister;
 
-  Widget _numberRow(String label, int value, Function(int) onChange) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 18)),
-          Row(
-            children: [
-              IconButton(
-                onPressed: value > 1 ? () => onChange(value - 1) : null,
-                icon: const Icon(Icons.remove_circle_outline),
-              ),
-              Text("$value", style: const TextStyle(fontSize: 18)),
-              IconButton(
-                onPressed: () => onChange(value + 1),
-                icon: const Icon(Icons.add_circle_outline),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  const _OnboardData({
+    required this.image,
+    required this.title,
+    required this.desc,
+    required this.button,
+    required this.showRegister,
+  });
 }
