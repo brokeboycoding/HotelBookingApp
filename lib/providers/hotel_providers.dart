@@ -1,8 +1,10 @@
 import 'dart:async';
-import 'package:booking_app/models/review_model.dart';
-import 'package:flutter/foundation.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
+
+import 'package:booking_app/models/review_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+
 import '../models/hotel_model.dart';
 import '../models/room_model.dart';
 import '../services/hotel_services.dart';
@@ -10,9 +12,11 @@ import '../services/hotel_services.dart';
 class HotelProvider extends ChangeNotifier {
   final HotelService _hotelService = HotelService();
 
-  List<HotelModel> _hotels = [];
-  List<RoomModel> _rooms = [];
-  List<ReviewModel> _reviews = [];
+  // ✅ FIX: private fields có thể final (vì không gán lại list nữa)
+  final List<HotelModel> _hotels = <HotelModel>[];
+  final List<RoomModel> _rooms = <RoomModel>[];
+  final List<ReviewModel> _reviews = <ReviewModel>[];
+
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -38,7 +42,10 @@ class HotelProvider extends ChangeNotifier {
     _reviewsSubscription?.cancel();
   }
 
-  // Tạo khách sạn mới
+  // ============================================================
+  // HOTEL
+  // ============================================================
+
   Future<bool> createHotel({
     required String ownerId,
     required String name,
@@ -74,128 +81,6 @@ class HotelProvider extends ChangeNotifier {
     }
   }
 
-  // Tạo phòng mới
-  Future<void> createRoom({
-    required String hotelId,
-    required String roomNumber,
-    required String type,
-    required double price,
-    required String description,
-    required int maxGuests,
-    required List<String> amenities,
-    required List<String> imageUrls,
-  }) async {
-    try {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
-
-      await _hotelService.createRoom(
-        hotelId: hotelId,
-        roomNumber: roomNumber,
-        type: type,
-        price: price,
-        description: description,
-        maxGuests: maxGuests,
-        amenities: amenities,
-        imageUrls: imageUrls,
-      );
-    } catch (e) {
-      _errorMessage = e.toString();
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // ... (other methods remain the same) ...
-
-  // Cập nhật phòng
-  Future<void> updateRoom({
-    required String roomId,
-    String? roomNumber,
-    String? type,
-    double? price,
-    String? description,
-    int? maxGuests,
-    List<String>? amenities,
-    RoomStatus? status,
-    List<String>? imageUrls,
-  }) async {
-    try {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
-
-      await _hotelService.updateRoom(
-        roomId: roomId,
-        roomNumber: roomNumber,
-        type: type,
-        price: price,
-        description: description,
-        maxGuests: maxGuests,
-        amenities: amenities,
-        status: status,
-        imageUrls: imageUrls,
-      );
-    } catch (e) {
-      _errorMessage = e.toString();
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // Load phòng của khách sạn
-
-  void loadHotelRooms(String hotelId) {
-    _roomsSubscription?.cancel();
-
-    _roomsSubscription = _hotelService.getHotelRooms(hotelId).listen((rooms) {
-      _rooms = rooms;
-
-      notifyListeners();
-    });
-  }
-
-  // Load reviews của khách sạn
-
-  void loadHotelReviews(String hotelId) {
-    _reviewsSubscription?.cancel();
-
-    _reviewsSubscription = _hotelService.getHotelReviews(hotelId).listen((reviews) {
-      _reviews = reviews;
-      notifyListeners();
-    });
-  }
-
-  // ADMIN METHODS
-  void loadPendingRooms() {
-    _roomsSubscription?.cancel();
-    _roomsSubscription = _hotelService.getPendingRooms().listen((rooms) {
-      _rooms = rooms;
-      notifyListeners();
-    });
-  }
-
-  Future<void> updateRoomStatus(String roomId, RoomStatus status) async {
-    try {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
-      await _hotelService.updateRoomStatus(roomId, status);
-    } catch (e) {
-      _errorMessage = e.toString();
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // Cập nhật khách sạn
   Future<bool> updateHotel({
     required String hotelId,
     String? name,
@@ -235,7 +120,6 @@ class HotelProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       _errorMessage = null;
-      // notifyListeners(); // Removed
       return await _hotelService.getHotelById(hotelId);
     } catch (e) {
       _errorMessage = e.toString();
@@ -247,34 +131,143 @@ class HotelProvider extends ChangeNotifier {
     }
   }
 
-  // Xóa khách sạn
   Future<bool> deleteHotel(String hotelId) async {
     try {
       _isLoading = true;
-
       _errorMessage = null;
-
       notifyListeners();
 
       await _hotelService.deleteHotel(hotelId);
 
+      // ✅ local update
+      _hotels.removeWhere((h) => h.hotelId == hotelId);
+
       _isLoading = false;
-
       notifyListeners();
-
       return true;
     } catch (e) {
       _isLoading = false;
-
       _errorMessage = e.toString();
-
       notifyListeners();
-
       return false;
     }
   }
 
-  // Xóa phòng
+  // ============================================================
+  // ROOMS
+  // ============================================================
+
+  Future<void> createRoom({
+    required String hotelId,
+    required String roomNumber,
+    required String type,
+    required double price,
+    required String description,
+    required int maxGuests,
+    required List<String> amenities,
+    required List<String> imageUrls,
+  }) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _hotelService.createRoom(
+        hotelId: hotelId,
+        roomNumber: roomNumber,
+        type: type,
+        price: price,
+        description: description,
+        maxGuests: maxGuests,
+        amenities: amenities,
+        imageUrls: imageUrls,
+      );
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateRoom({
+    required String roomId,
+    String? roomNumber,
+    String? type,
+    double? price,
+    String? description,
+    int? maxGuests,
+    List<String>? amenities,
+    RoomStatus? status,
+    List<String>? imageUrls,
+  }) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _hotelService.updateRoom(
+        roomId: roomId,
+        roomNumber: roomNumber,
+        type: type,
+        price: price,
+        description: description,
+        maxGuests: maxGuests,
+        amenities: amenities,
+        status: status,
+        imageUrls: imageUrls,
+      );
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ FIX: void -> Future<void> để await được
+  Future<void> loadHotelRooms(String hotelId) async {
+    _roomsSubscription?.cancel();
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final completer = Completer<void>();
+
+    _roomsSubscription = _hotelService.getHotelRooms(hotelId).listen(
+          (rooms) {
+        // ✅ FIX: không gán list mới -> clear/addAll để _rooms có thể final
+        _rooms
+          ..clear()
+          ..addAll(rooms);
+
+        if (_isLoading) _isLoading = false;
+        notifyListeners();
+
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (e) {
+        _isLoading = false;
+        _errorMessage = e.toString();
+        notifyListeners();
+
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+    );
+
+    await completer.future.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () {
+        _isLoading = false;
+        _errorMessage ??= 'Tải danh sách phòng quá lâu, vui lòng thử lại.';
+        notifyListeners();
+      },
+    );
+  }
+
   Future<bool> deleteRoom(String roomId) async {
     try {
       _isLoading = true;
@@ -283,6 +276,8 @@ class HotelProvider extends ChangeNotifier {
 
       await _hotelService.deleteRoom(roomId);
 
+      _rooms.removeWhere((r) => r.roomId == roomId);
+
       _isLoading = false;
       notifyListeners();
       return true;
@@ -294,7 +289,142 @@ class HotelProvider extends ChangeNotifier {
     }
   }
 
-  // Tìm kiếm phòng
+  // ============================================================
+  // REVIEWS
+  // ============================================================
+
+  // ✅ FIX: void -> Future<void> để await được
+  Future<void> loadHotelReviews(String hotelId) async {
+    _reviewsSubscription?.cancel();
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final completer = Completer<void>();
+
+    _reviewsSubscription = _hotelService.getHotelReviews(hotelId).listen(
+          (reviews) {
+        _reviews
+          ..clear()
+          ..addAll(reviews);
+
+        if (_isLoading) _isLoading = false;
+        notifyListeners();
+
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (e) {
+        _isLoading = false;
+        _errorMessage = e.toString();
+        notifyListeners();
+
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+    );
+
+    await completer.future.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () {
+        _isLoading = false;
+        _errorMessage ??= 'Tải đánh giá quá lâu, vui lòng thử lại.';
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> addReview({
+    required String roomId,
+    required String hotelId,
+    required double rating,
+    required String comment,
+  }) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _hotelService.addReview(
+        roomId: roomId,
+        userId: 'mock_user_id',
+        userName: 'Mock User',
+        userAvatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
+        rating: rating,
+        comment: comment,
+      );
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ============================================================
+  // ADMIN
+  // ============================================================
+
+  // ✅ FIX: void -> Future<void> để await được
+  Future<void> loadPendingRooms() async {
+    _roomsSubscription?.cancel();
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final completer = Completer<void>();
+
+    _roomsSubscription = _hotelService.getPendingRooms().listen(
+          (rooms) {
+        _rooms
+          ..clear()
+          ..addAll(rooms);
+
+        if (_isLoading) _isLoading = false;
+        notifyListeners();
+
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (e) {
+        _isLoading = false;
+        _errorMessage = e.toString();
+        notifyListeners();
+
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+    );
+
+    await completer.future.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () {
+        _isLoading = false;
+        _errorMessage ??= 'Tải phòng chờ duyệt quá lâu, vui lòng thử lại.';
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> updateRoomStatus(String roomId, RoomStatus status) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      await _hotelService.updateRoomStatus(roomId, status);
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ============================================================
+  // SEARCH
+  // ============================================================
+
   Future<List<RoomModel>> searchRooms({
     required DateTime checkIn,
     required DateTime checkOut,
@@ -313,18 +443,16 @@ class HotelProvider extends ChangeNotifier {
     }
   }
 
-  void clearError() {
-    _errorMessage = null;
-    notifyListeners();
-  }
-
-  // Fetch all rooms for search screen
   Future<void> fetchAllRooms() async {
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
-      _rooms = await _hotelService.fetchAllRooms();
+
+      final allRooms = await _hotelService.fetchAllRooms();
+      _rooms
+        ..clear()
+        ..addAll(allRooms);
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -333,31 +461,12 @@ class HotelProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addReview({
-    required String roomId,
-    required String hotelId,
-    required double rating,
-    required String comment,
-  }) async {
-    try {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
-      // In a real app, get user details from AuthProvider
-      await _hotelService.addReview(
-        roomId: roomId,
-        userId: 'mock_user_id',
-        userName: 'Mock User',
-        userAvatarUrl: 'https://i.pravatar.cc/150?u=a042581f4e29026704d',
-        rating: rating,
-        comment: comment,
-      );
-    } catch (e) {
-      _errorMessage = e.toString();
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+  // ============================================================
+  // UTILS
+  // ============================================================
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
   }
 }

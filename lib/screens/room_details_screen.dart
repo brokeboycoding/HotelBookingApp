@@ -6,232 +6,391 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class RoomDetailsScreen extends StatefulWidget {
-  const RoomDetailsScreen({Key? key}) : super(key: key);
+  const RoomDetailsScreen({super.key}); // ✅ super parameter
 
   static const routeName = '/room-details';
 
   @override
-  _RoomDetailsScreenState createState() => _RoomDetailsScreenState();
+  State<RoomDetailsScreen> createState() => _RoomDetailsScreenState(); // ✅ public type
 }
 
 class _RoomDetailsScreenState extends State<RoomDetailsScreen> {
-  HotelModel? _hotel;
-  bool _isLoading = true;
+  HotelModel? _khachSan;
+  RoomModel? _phong;
+
+  bool _dangTai = true;
+  bool _daTaiDuLieu = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _fetchHotelDetails();
+
+    // ✅ chặn gọi lại nhiều lần
+    if (_daTaiDuLieu) return;
+    _daTaiDuLieu = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is RoomModel) {
+      _phong = args;
+      _taiThongTinKhachSan(args.hotelId);
+    } else {
+      setState(() => _dangTai = false);
+    }
   }
 
-  Future<void> _fetchHotelDetails() async {
-    final room = ModalRoute.of(context)!.settings.arguments as RoomModel;
-    final hotelProvider = Provider.of<HotelProvider>(context, listen: false);
-
+  Future<void> _taiThongTinKhachSan(String hotelId) async {
+    final hotelProvider = context.read<HotelProvider>();
     try {
-      final hotel = await hotelProvider.getHotelById(room.hotelId);
-      if (mounted) {
-        setState(() {
-          _hotel = hotel;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        // Optionally show an error message
-      }
+      final hotel = await hotelProvider.getHotelById(hotelId);
+      if (!mounted) return;
+      setState(() {
+        _khachSan = hotel;
+        _dangTai = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _dangTai = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final RoomModel room =
-        ModalRoute.of(context)!.settings.arguments as RoomModel;
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final room = _phong;
+    if (room == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Chi tiết phòng')),
+        body: Center(
+          child: Text(
+            'Không nhận được dữ liệu phòng.',
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
+          ),
+        ),
+      );
+    }
+
+    final anh = room.images.isNotEmpty ? room.images.first.trim() : '';
+    final coAnh = anh.isNotEmpty;
 
     return Scaffold(
+      backgroundColor: cs.surface,
       body: Stack(
         children: [
-          // Background Image
+          // Ảnh nền (nửa màn hình)
           Hero(
             tag: 'room_image_${room.roomId}',
-            child: Container(
-              height: MediaQuery.of(context).size.height * 0.5,
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: NetworkImage(room.images.isNotEmpty ? room.images.first : 'https://via.placeholder.com/150'),
-                  fit: BoxFit.cover,
-                  onError: (e, s) {},
-                ),
-              ),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.52,
+              width: double.infinity,
+              child: coAnh
+                  ? Image.network(
+                anh,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _anhLoi(cs),
+              )
+                  : _anhLoi(cs),
             ),
           ),
-          // Back Button
+
+          // Nút quay lại
           Positioned(
-            top: 40,
-            left: 16,
-            child: CircleAvatar(
-              backgroundColor: Colors.black.withOpacity(0.5),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 12,
+            child: _nutTron(
+              cs: cs,
+              icon: Icons.arrow_back,
+              tooltip: 'Quay lại',
+              onTap: () => Navigator.of(context).pop(),
             ),
           ),
-          // Report Button
+
+          // Nút báo cáo
           Positioned(
-            top: 40,
-            right: 16,
-            child: CircleAvatar(
-              backgroundColor: Colors.black.withOpacity(0.5),
-              child: IconButton(
-                icon: const Icon(Icons.report, color: Colors.white),
-                onPressed: () {
-                  Navigator.of(context).pushNamed(
-                    '/add-report',
-                    arguments: {
-                      'hotelId': room.hotelId,
-                      'roomId': room.roomId,
-                    },
-                  );
-                },
-              ),
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 12,
+            child: _nutTron(
+              cs: cs,
+              icon: Icons.report,
+              tooltip: 'Báo cáo',
+              onTap: () {
+                Navigator.of(context).pushNamed(
+                  '/add-report',
+                  arguments: {
+                    'hotelId': room.hotelId,
+                    'roomId': room.roomId,
+                  },
+                );
+              },
             ),
           ),
-          // Details Sheet
+
+          // Sheet kéo lên
           DraggableScrollableSheet(
-            initialChildSize: 0.6,
-            minChildSize: 0.6,
-            maxChildSize: 0.9,
-            builder: (BuildContext context, ScrollController scrollController) {
+            initialChildSize: 0.62,
+            minChildSize: 0.62,
+            maxChildSize: 0.92,
+            builder: (context, scrollController) {
               return Container(
                 decoration: BoxDecoration(
-                  color: theme.scaffoldBackgroundColor,
+                  color: cs.surface,
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
+                    topLeft: Radius.circular(28),
+                    topRight: Radius.circular(28),
+                  ),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
                   ),
                 ),
                 child: SingleChildScrollView(
                   controller: scrollController,
-                  padding: const EdgeInsets.all(24.0),
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _hotel == null
-                          ? const Center(child: Text('Hotel details not found.'))
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Title and Price
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        room.type,
-                                        style: const TextStyle(
-                                          fontSize: 26,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Text.rich(
-                                      TextSpan(
-                                        children: [
-                                          TextSpan(
-                                            text:
-                                                '${room.price.toStringAsFixed(0)} VNĐ',
-                                            style: TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.bold,
-                                              color: theme.colorScheme.secondary,
-                                            ),
-                                          ),
-                                          const TextSpan(
-                                            text: ' / night',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      textAlign: TextAlign.right,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on, color: Colors.grey, size: 16),
-                                    const SizedBox(width: 4),
-                                    Text(_hotel!.name, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                                  ],
-                                ),
-                                const SizedBox(height: 24),
-                                // Description
-                                const Text(
-                                  'Description',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  room.description,
-                                  style: const TextStyle(
-                                      fontSize: 16, height: 1.5, color: Colors.white70),
-                                ),
-                                const SizedBox(height: 24),
-                                // Amenities
-                                const Text(
-                                  'Amenities',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  spacing: 12.0,
-                                  runSpacing: 12.0,
-                                  children: room.amenities
-                                      .map((amenity) => Chip(
-                                            label: Text(amenity),
-                                            backgroundColor:
-                                                theme.colorScheme.surface,
-                                          ))
-                                      .toList(),
-                                ),
-                                const SizedBox(height: 24),
-                                // Map
-                                const Text(
-                                  'Location',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 16),
-                                LocationMap(location: _hotel!.location, hotelName: _hotel!.name),
-                              ],
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // thanh kéo
+                      Center(
+                        child: Container(
+                          width: 44,
+                          height: 5,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: cs.onSurface.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+
+                      if (_dangTai)
+                        const Center(child: CircularProgressIndicator())
+                      else if (_khachSan == null)
+                        Center(
+                          child: Text(
+                            'Không tìm thấy thông tin khách sạn.',
+                            style: TextStyle(
+                              color: cs.onSurface.withValues(alpha: 0.7),
                             ),
+                          ),
+                        )
+                      else
+                        _noiDungChiTiet(theme, cs, room, _khachSan!),
+                    ],
+                  ),
                 ),
               );
             },
           ),
-          // Book Now Button
+
+          // Nút đặt phòng (dưới)
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
-              padding: const EdgeInsets.all(16),
-              color: theme.scaffoldBackgroundColor.withOpacity(0.8),
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/booking', arguments: room);
-                },
-                child: const Text('Book Now'),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: cs.surface.withValues(alpha: 0.92),
+                border: Border(
+                  top: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
+                  ),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/booking', arguments: room);
+                    },
+                    child: const Text(
+                      'Đặt phòng ngay',
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                    ),
+                  ),
+                ),
               ),
             ),
-          )
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _noiDungChiTiet(
+      ThemeData theme,
+      ColorScheme cs,
+      RoomModel room,
+      HotelModel hotel,
+      ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Tên phòng + giá
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                room.type,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: cs.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '${room.price.toStringAsFixed(0)} VNĐ',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: cs.secondary,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' / đêm',
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.55),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            Icon(Icons.location_on, color: cs.onSurface.withValues(alpha: 0.55), size: 16),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                hotel.name,
+                style: TextStyle(
+                  color: cs.onSurface.withValues(alpha: 0.7),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 22),
+
+        // Mô tả
+        Text(
+          'Mô tả',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          room.description.trim().isEmpty ? 'Chưa có mô tả.' : room.description,
+          style: TextStyle(
+            fontSize: 15.5,
+            height: 1.5,
+            color: cs.onSurface.withValues(alpha: 0.75),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+
+        const SizedBox(height: 22),
+
+        // Tiện nghi
+        Text(
+          'Tiện nghi',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        if (room.amenities.isEmpty)
+          Text(
+            'Chưa cập nhật tiện nghi.',
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
+          )
+        else
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: room.amenities
+                .map(
+                  (t) => Chip(
+                label: Text(t),
+                side: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.55),
+                ),
+                backgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+              ),
+            )
+                .toList(),
+          ),
+
+        const SizedBox(height: 22),
+
+        // Bản đồ
+        Text(
+          'Vị trí',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+        LocationMap(location: hotel.location, hotelName: hotel.name),
+      ],
+    );
+  }
+
+  Widget _nutTron({
+    required ColorScheme cs,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: cs.surface.withValues(alpha: 0.35),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Icon(icon, color: cs.onSurface),
+        ),
+      ),
+    );
+  }
+
+  Widget _anhLoi(ColorScheme cs) {
+    return Container(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.image_not_supported_outlined,
+        color: cs.onSurfaceVariant,
+        size: 36,
       ),
     );
   }

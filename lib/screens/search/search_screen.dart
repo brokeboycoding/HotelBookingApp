@@ -6,182 +6,277 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({Key? key}) : super(key: key);
+  const SearchScreen({super.key});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final _searchController = TextEditingController();
-  DateTime? _checkInDate;
-  DateTime? _checkOutDate;
-  List<RoomModel> _searchResults = [];
-  bool _isLoading = false;
+  final TextEditingController _tuKhoaCtrl = TextEditingController();
 
-  Future<void> _selectDate(BuildContext context, bool isCheckIn) async {
+  DateTime? _ngayNhanPhong;
+  DateTime? _ngayTraPhong;
+
+  List<RoomModel> _ketQua = <RoomModel>[];
+  bool _dangTai = false;
+
+  @override
+  void dispose() {
+    _tuKhoaCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _chonNgay(BuildContext context, {required bool laNhanPhong}) async {
     final theme = Theme.of(context);
-    final DateTime? picked = await showDatePicker(
+
+    final initial = laNhanPhong
+        ? (_ngayNhanPhong ?? DateTime.now())
+        : (_ngayTraPhong ??
+        (_ngayNhanPhong?.add(const Duration(days: 1)) ?? DateTime.now()));
+
+    final first = laNhanPhong
+        ? DateTime.now()
+        : (_ngayNhanPhong?.add(const Duration(days: 1)) ?? DateTime.now());
+
+    final picked = await showDatePicker(
       context: context,
-      initialDate:
-          (isCheckIn
-              ? _checkInDate
-              : _checkOutDate ?? _checkInDate?.add(const Duration(days: 1))) ??
-          DateTime.now(),
-      firstDate: isCheckIn
-          ? DateTime.now()
-          : _checkInDate!.add(const Duration(days: 1)),
+      initialDate: initial,
+      firstDate: first,
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) {
         return Theme(
           data: theme.copyWith(
             colorScheme: theme.colorScheme.copyWith(
               primary: theme.colorScheme.secondary,
-              onPrimary: Colors.black,
+              onPrimary: theme.colorScheme.onSecondary,
             ),
           ),
           child: child!,
         );
       },
     );
-    if (picked != null) {
-      setState(() {
-        if (isCheckIn) {
-          _checkInDate = picked;
-          if (_checkOutDate != null && !_checkOutDate!.isAfter(_checkInDate!)) {
-            _checkOutDate = null;
-          }
-        } else {
-          _checkOutDate = picked;
+
+    if (picked == null) return;
+
+    setState(() {
+      if (laNhanPhong) {
+        _ngayNhanPhong = picked;
+        // Nếu ngày trả <= ngày nhận thì reset ngày trả
+        if (_ngayTraPhong != null && !_ngayTraPhong!.isAfter(_ngayNhanPhong!)) {
+          _ngayTraPhong = null;
         }
-      });
-    }
+      } else {
+        _ngayTraPhong = picked;
+      }
+    });
   }
 
-  Future<void> _performSearch() async {
-    if (_checkInDate == null || _checkOutDate == null) {
+  bool _chuaDuNgay() => _ngayNhanPhong == null || _ngayTraPhong == null;
+
+  bool _coChua(String text, String keyword) {
+    final t = text.toLowerCase();
+    final k = keyword.toLowerCase();
+    return t.contains(k);
+  }
+
+  List<RoomModel> _locTheoTuKhoa(List<RoomModel> ds, String keyword) {
+    final k = keyword.trim();
+    if (k.isEmpty) return ds;
+
+    return ds.where((r) {
+      final type = r.type.toString();
+      final desc = r.description.toString();
+      final hotelId = r.hotelId.toString();
+      final roomNumber = r.roomNumber.toString();
+
+      final amenities = (r.amenities).join(' ');
+      return _coChua(type, k) ||
+          _coChua(desc, k) ||
+          _coChua(hotelId, k) ||
+          _coChua(roomNumber, k) ||
+          _coChua(amenities, k);
+    }).toList();
+  }
+
+  Future<void> _timKiem() async {
+    final cs = Theme.of(context).colorScheme;
+
+    if (_chuaDuNgay()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select both check-in and check-out dates.'),
+        SnackBar(
+          content: const Text('Vui lòng chọn đủ ngày nhận phòng và ngày trả phòng.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: cs.errorContainer,
         ),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _dangTai = true);
 
-    final hotelProvider = Provider.of<HotelProvider>(context, listen: false);
+    final hotelProvider = context.read<HotelProvider>();
+    final tuKhoa = _tuKhoaCtrl.text.trim(); // ✅ giờ đã dùng
+
     try {
       final results = await hotelProvider.searchRooms(
-        checkIn: _checkInDate!,
-        checkOut: _checkOutDate!,
+        checkIn: _ngayNhanPhong!,
+        checkOut: _ngayTraPhong!,
       );
-      setState(() {
-        _searchResults = results;
-      });
+
+      // ✅ Lọc theo từ khóa (client-side) để khỏi báo "keyword isn't used"
+      final loc = _locTheoTuKhoa(results, tuKhoa);
+
+      if (!mounted) return;
+      setState(() => _ketQua = loc);
     } catch (e) {
-      // Handle error
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không thể tìm kiếm: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: cs.errorContainer,
+        ),
+      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _dangTai = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Find your room')),
+      appBar: AppBar(title: const Text('Tìm phòng')),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
+                TextField(
+                  controller: _tuKhoaCtrl,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _timKiem(),
+                  decoration: InputDecoration(
+                    hintText: 'Nhập từ khóa (VIP, view biển, 2 giường...)',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _tuKhoaCtrl.text.isEmpty
+                        ? null
+                        : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Xóa từ khóa',
+                      onPressed: () {
+                        _tuKhoaCtrl.clear();
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 16),
+
                 Row(
                   children: [
                     Expanded(
-                      child: _buildDateChip(
+                      child: _chipNgay(
                         context: context,
-                        label: 'Check-in',
-                        date: _checkInDate,
-                        onTap: () => _selectDate(context, true),
+                        nhan: 'Nhận phòng',
+                        ngay: _ngayNhanPhong,
+                        onTap: () => _chonNgay(context, laNhanPhong: true),
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Icon(Icons.arrow_forward),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Icon(Icons.arrow_forward, color: cs.onSurface.withValues(alpha: 0.6)),
                     ),
                     Expanded(
-                      child: _buildDateChip(
+                      child: _chipNgay(
                         context: context,
-                        label: 'Check-out',
-                        date: _checkOutDate,
-                        onTap: () => _selectDate(context, false),
+                        nhan: 'Trả phòng',
+                        ngay: _ngayTraPhong,
+                        onTap: () => _chonNgay(context, laNhanPhong: false),
                       ),
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 16),
+
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: (_checkInDate != null && _checkOutDate != null)
-                        ? _performSearch
-                        : null,
-                    child: const Text('Search'),
+                    onPressed: (!_chuaDuNgay() && !_dangTai) ? _timKiem : null,
+                    child: const Text('Tìm kiếm'),
                   ),
                 ),
               ],
             ),
           ),
+
           const Divider(height: 1),
+
           Expanded(
-            child: _isLoading
+            child: _dangTai
                 ? const Center(child: CircularProgressIndicator())
-                : _searchResults.isNotEmpty
+                : (_ketQua.isNotEmpty)
                 ? ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _searchResults.length,
-                    itemBuilder: (context, index) {
-                      final room = _searchResults[index];
-                      return RoomListItem(room: room);
-                    },
-                  )
-                : const Center(
-                    child: Text('No available rooms for the selected dates.'),
-                  ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _ketQua.length,
+              itemBuilder: (context, index) {
+                final room = _ketQua[index];
+                return RoomListItem(room: room);
+              },
+            )
+                : Center(
+              child: Text(
+                'Chưa có phòng phù hợp trong khoảng ngày này.',
+                style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDateChip({
+  Widget _chipNgay({
     required BuildContext context,
-    required String label,
-    required DateTime? date,
+    required String nhan,
+    required DateTime? ngay,
     required VoidCallback onTap,
   }) {
+    final cs = Theme.of(context).colorScheme;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: cs.surface,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(color: Colors.grey)),
+            Text(
+              nhan,
+              style: TextStyle(
+                color: cs.onSurface.withValues(alpha: 0.65),
+                fontSize: 12.5,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
-              date == null ? 'Select Date' : DateFormat('dd MMM').format(date),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ngay == null ? 'Chọn ngày' : DateFormat('dd/MM').format(ngay),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: cs.onSurface,
+              ),
             ),
           ],
         ),
@@ -191,12 +286,16 @@ class _SearchScreenState extends State<SearchScreen> {
 }
 
 class RoomListItem extends StatelessWidget {
-  const RoomListItem({Key? key, required this.room}) : super(key: key);
+  const RoomListItem({super.key, required this.room});
 
   final RoomModel room;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    final imageUrl = room.images.isNotEmpty ? room.images.first : '';
+
     return GestureDetector(
       onTap: () {
         Navigator.of(context).pushNamed(
@@ -207,27 +306,45 @@ class RoomListItem extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
-// ... (rest of the class)
-          color: Theme.of(context).colorScheme.surface,
+          color: cs.surface,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 200,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                image: DecorationImage(
-                  image: NetworkImage(room.images.first),
+            // Ảnh
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+              child: SizedBox(
+                height: 200,
+                width: double.infinity,
+                child: imageUrl.isEmpty
+                    ? Container(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                  child: Center(
+                    child: Icon(Icons.image_not_supported_outlined,
+                        color: cs.onSurfaceVariant),
+                  ),
+                )
+                    : Image.network(
+                  imageUrl,
                   fit: BoxFit.cover,
-                  onError: (e, s) {},
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                    child: Center(
+                      child: Icon(Icons.broken_image_outlined,
+                          color: cs.onSurfaceVariant),
+                    ),
+                  ),
                 ),
               ),
             ),
+
+            // Thông tin
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -235,15 +352,19 @@ class RoomListItem extends StatelessWidget {
                 children: [
                   Text(
                     room.type,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Hotel ID: ${room.hotelId}',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                    'Mã khách sạn: ${room.hotelId}',
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.65),
+                      fontSize: 14,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -251,18 +372,14 @@ class RoomListItem extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            Icons.star,
-                            color: Theme.of(context).colorScheme.secondary,
-                            size: 20,
-                          ),
+                          Icon(Icons.star, color: cs.secondary, size: 20),
                           const SizedBox(width: 4),
-                          // Hardcoded rating for now
-                          const Text(
-                            '4.8',
+                          Text(
+                            '4,8',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
                               fontSize: 16,
+                              color: cs.onSurface,
                             ),
                           ),
                         ],
@@ -274,14 +391,14 @@ class RoomListItem extends StatelessWidget {
                               text: '${room.price.toStringAsFixed(0)} VNĐ',
                               style: TextStyle(
                                 fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.w900,
+                                color: cs.secondary,
                               ),
                             ),
-                            const TextSpan(
-                              text: ' / night',
+                            TextSpan(
+                              text: ' / đêm',
                               style: TextStyle(
-                                color: Colors.grey,
+                                color: cs.onSurface.withValues(alpha: 0.6),
                                 fontSize: 14,
                               ),
                             ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+
 import '../../models/chat_model.dart';
 import '../../services/chat_services.dart';
 
@@ -9,51 +9,51 @@ class ChatScreen extends StatefulWidget {
   final String otherUserName;
 
   const ChatScreen({
-    Key? key,
+    super.key,
     required this.chatId,
     required this.currentUserId,
     required this.otherUserName,
-  }) : super(key: key);
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final ChatService _chatService = ChatService();
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+  final ChatService _dichVuChat = ChatService();
+  final TextEditingController _boDieuKhienTinNhan = TextEditingController();
+  final ScrollController _boDieuKhienCuon = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    // Mark as read when entering the chat
-    _chatService.markAsRead(widget.chatId, widget.currentUserId);
+    // Đánh dấu đã đọc khi vào cuộc trò chuyện
+    _dichVuChat.markAsRead(widget.chatId, widget.currentUserId);
   }
 
   @override
   void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
+    _boDieuKhienTinNhan.dispose();
+    _boDieuKhienCuon.dispose();
     super.dispose();
   }
 
-  Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
+  Future<void> _guiTinNhan() async {
+    final noiDung = _boDieuKhienTinNhan.text.trim();
+    if (noiDung.isEmpty) return;
 
-    String text = _messageController.text.trim();
-    _messageController.clear();
+    _boDieuKhienTinNhan.clear();
 
     try {
-      await _chatService.sendMessage(
+      await _dichVuChat.sendMessage(
         chatId: widget.chatId,
         senderId: widget.currentUserId,
-        text: text,
+        text: noiDung,
       );
 
-      // Scroll to bottom
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
+      // Vì ListView reverse: true nên về "đầu list" là xuống cuối cuộc chat
+      if (_boDieuKhienCuon.hasClients) {
+        _boDieuKhienCuon.animateTo(
           0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
@@ -61,10 +61,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+
+      final cs = Theme.of(context).colorScheme;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not send message: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Gửi tin nhắn không thành công: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: cs.error,
         ),
       );
     }
@@ -72,70 +75,92 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.otherUserName),
       ),
       body: Column(
         children: [
-          // Messages list
+          // Danh sách tin nhắn
           Expanded(
             child: StreamBuilder<List<MessageModel>>(
-              stream: _chatService.getChatMessages(widget.chatId),
+              stream: _dichVuChat.getChatMessages(widget.chatId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('No messages yet.'));
+                final danhSachTinNhan = snapshot.data ?? <MessageModel>[];
+                if (danhSachTinNhan.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Chưa có tin nhắn nào.',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  );
                 }
 
-                List<MessageModel> messages = snapshot.data!;
-
                 return ListView.builder(
-                  controller: _scrollController,
+                  controller: _boDieuKhienCuon,
                   reverse: true,
                   padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
+                  itemCount: danhSachTinNhan.length,
                   itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message.senderId == widget.currentUserId;
-                    
-                    return _buildMessageBubble(message, isMe);
+                    final tinNhan = danhSachTinNhan[index];
+                    final laToi = tinNhan.senderId == widget.currentUserId;
+                    return _bongTinNhan(tinNhan, laToi, theme);
                   },
                 );
               },
             ),
           ),
-          _buildMessageInput(),
+
+          // Ô nhập tin nhắn
+          _oNhapTinNhan(theme),
         ],
       ),
     );
   }
 
-  Widget _buildMessageInput() {
+  Widget _oNhapTinNhan(ThemeData theme) {
+    final cs = theme.colorScheme;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: cs.surface,
+        border: Border(
+          top: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
       ),
       child: SafeArea(
         child: Row(
           children: [
             Expanded(
               child: TextField(
-                controller: _messageController,
-                decoration: const InputDecoration(
-                  hintText: 'Type a message...',
+                controller: _boDieuKhienTinNhan,
+                decoration: InputDecoration(
+                  hintText: 'Nhập tin nhắn…',
+                  hintStyle: TextStyle(
+                    color: cs.onSurface.withValues(alpha: 0.55),
+                  ),
                   border: InputBorder.none,
                 ),
                 maxLines: null,
+                textInputAction: TextInputAction.newline,
+                style: TextStyle(color: cs.onSurface),
               ),
             ),
             IconButton(
-              icon: Icon(Icons.send, color: Theme.of(context).colorScheme.secondary),
-              onPressed: _sendMessage,
+              icon: Icon(Icons.send, color: cs.secondary),
+              onPressed: _guiTinNhan,
+              tooltip: 'Gửi tin nhắn',
             ),
           ],
         ),
@@ -143,10 +168,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(MessageModel message, bool isMe) {
-    final theme = Theme.of(context);
+  Widget _bongTinNhan(MessageModel tinNhan, bool laToi, ThemeData theme) {
+    final cs = theme.colorScheme;
+
+    final mauNen = laToi ? cs.secondary : cs.surface;
+    final mauChu = laToi ? cs.onSecondary : cs.onSurface;
+
     return Row(
-      mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+      mainAxisAlignment: laToi ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: [
         Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
@@ -155,12 +184,15 @@ class _ChatScreenState extends State<ChatScreen> {
             maxWidth: MediaQuery.of(context).size.width * 0.75,
           ),
           decoration: BoxDecoration(
-            color: isMe ? theme.colorScheme.secondary : theme.colorScheme.surface,
+            color: mauNen,
             borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.35),
+            ),
           ),
           child: Text(
-            message.text,
-            style: TextStyle(color: isMe ? Colors.black : Colors.white),
+            tinNhan.text,
+            style: TextStyle(color: mauChu),
           ),
         ),
       ],

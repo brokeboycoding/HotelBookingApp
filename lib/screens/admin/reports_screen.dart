@@ -5,10 +5,10 @@ import 'package:provider/provider.dart';
 import '../../models/report_model.dart';
 
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({Key? key}) : super(key: key);
+  const ReportsScreen({super.key}); // ✅ super parameter
 
   @override
-  _ReportsScreenState createState() => _ReportsScreenState();
+  State<ReportsScreen> createState() => _ReportsScreenState(); // ✅ public type
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
@@ -16,26 +16,63 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ReportProvider>(context, listen: false).loadReports();
+      context.read<ReportProvider>().loadReports();
     });
   }
 
-  void _updateStatus(String reportId, ReportStatus newStatus) {
-    final reportProvider = Provider.of<ReportProvider>(context, listen: false);
-    reportProvider.updateReportStatus(reportId, newStatus).catchError((error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update status: $error'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    });
+  Future<void> _capNhatTrangThai(String maBaoCao, ReportStatus trangThaiMoi) async {
+    final reportProvider = context.read<ReportProvider>();
+    try {
+      await reportProvider.updateReportStatus(maBaoCao, trangThaiMoi);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Đã cập nhật trạng thái báo cáo.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cập nhật trạng thái thất bại: $e'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
+  String _trangThaiVi(ReportStatus status) {
+    switch (status) {
+      case ReportStatus.pending:
+        return 'Chờ xử lý';
+      case ReportStatus.resolved:
+        return 'Đã xử lý';
+      case ReportStatus.dismissed:
+        return 'Bỏ qua';
+    }
+  }
+
+  Color _mauTrangThai(ReportStatus status) {
+    switch (status) {
+      case ReportStatus.pending:
+        return Colors.orange;
+      case ReportStatus.resolved:
+        return Colors.green;
+      case ReportStatus.dismissed:
+        return Colors.grey;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Báo cáo từ người dùng'),
@@ -47,62 +84,114 @@ class _ReportsScreenState extends State<ReportsScreen> {
           }
 
           if (reportProvider.reports.isEmpty) {
-            return const Center(child: Text('Không có báo cáo nào.'));
+            return Center(
+              child: Text(
+                'Không có báo cáo nào.',
+                style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+              ),
+            );
           }
 
           return ListView.builder(
+            padding: const EdgeInsets.only(top: 8, bottom: 16),
             itemCount: reportProvider.reports.length,
             itemBuilder: (ctx, i) {
               final report = reportProvider.reports[i];
+
+              final ngayGui = DateFormat('dd/MM/yyyy').format(report.createdAt);
+              final tenTrangThai = _trangThaiVi(report.status);
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+                elevation: isDark ? 0 : 2,
+                color: cs.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
+                  ),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Lý do: ${report.reason}',
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text('Khách sạn: ${report.reportedHotelId}'),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Mã khách sạn: ${report.reportedHotelId}',
+                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+                      ),
                       if (report.reportedRoomId != null)
-                        Text('Phòng: ${report.reportedRoomId}'),
-                      const SizedBox(height: 4),
-                      Text('Người báo cáo: ${report.reporterUserId}'),
-                      const Divider(),
-                      Text(report.description),
-                      const Divider(),
+                        Text(
+                          'Mã phòng: ${report.reportedRoomId}',
+                          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+                        ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Người báo cáo: ${report.reporterUserId}',
+                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+                      ),
+                      const Divider(height: 18),
+                      Text(
+                        report.description,
+                        style: TextStyle(color: cs.onSurface.withValues(alpha: 0.85)),
+                      ),
+                      const Divider(height: 18),
+
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Chip(
-                            label: Text(report.status.name),
-                            backgroundColor:
-                                _getStatusColor(report.status),
-                          ),
-                          Text(DateFormat('dd/MM/yy')
-                              .format(report.createdAt)),
-                          if (report.status == ReportStatus.pending)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                TextButton(
-                                  child: const Text('Resolve'),
-                                  onPressed: () => _updateStatus(
-                                      report.reportId, ReportStatus.resolved),
-                                ),
-                                TextButton(
-                                  child: const Text('Dismiss'),
-                                  onPressed: () => _updateStatus(
-                                      report.reportId, ReportStatus.dismissed),
-                                ),
-                              ],
+                            label: Text(
+                              tenTrangThai,
+                              style: const TextStyle(fontWeight: FontWeight.w700),
                             ),
+                            backgroundColor: _mauTrangThai(report.status).withValues(alpha: 0.20),
+                            side: BorderSide(color: _mauTrangThai(report.status)),
+                          ),
+                          const Spacer(),
+                          Text(
+                            ngayGui,
+                            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
+                          ),
                         ],
-                      )
+                      ),
+
+                      if (report.status == ReportStatus.pending) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.check),
+                                label: const Text('Đánh dấu đã xử lý'),
+                                onPressed: () => _capNhatTrangThai(
+                                  report.reportId,
+                                  ReportStatus.resolved,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.close),
+                                label: const Text('Bỏ qua báo cáo'),
+                                onPressed: () => _capNhatTrangThai(
+                                  report.reportId,
+                                  ReportStatus.dismissed,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -112,16 +201,5 @@ class _ReportsScreenState extends State<ReportsScreen> {
         },
       ),
     );
-  }
-
-  Color _getStatusColor(ReportStatus status) {
-    switch (status) {
-      case ReportStatus.pending:
-        return Colors.orange;
-      case ReportStatus.resolved:
-        return Colors.green;
-      case ReportStatus.dismissed:
-        return Colors.grey;
-    }
   }
 }

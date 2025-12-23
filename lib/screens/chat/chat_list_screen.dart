@@ -1,123 +1,166 @@
-import 'package:booking_app/providers/chat_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+
 import '../../providers/auth_providers.dart';
-import '../../models/chat_model.dart';
+import '../../providers/chat_providers.dart';
 
 class ChatListScreen extends StatefulWidget {
-  const ChatListScreen({Key? key}) : super(key: key);
+  const ChatListScreen({super.key});
 
   @override
-  _ChatListScreenState createState() => _ChatListScreenState();
+  State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      if (authProvider.currentUser != null) {
-        Provider.of<ChatProvider>(context, listen: false)
-            .loadChats(authProvider.currentUser!.uid);
+      final authProvider = context.read<AuthProvider>();
+      final maNguoiDung = authProvider.currentUser?.uid;
+      if (maNguoiDung != null && maNguoiDung.isNotEmpty) {
+        context.read<ChatProvider>().loadChats(maNguoiDung);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final currentUserId = authProvider.currentUser?.uid;
+    final cs = Theme.of(context).colorScheme;
+
+    final authProvider = context.watch<AuthProvider>();
+    final maNguoiDungHienTai = authProvider.currentUser?.uid;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messages'),
+        title: const Text('Tin nhắn'),
       ),
       body: Consumer<ChatProvider>(
         builder: (context, chatProvider, child) {
           if (chatProvider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
+
           if (chatProvider.chats.isEmpty) {
-            return const Center(child: Text('No conversations yet.'));
+            return Center(
+              child: Text(
+                'Chưa có cuộc trò chuyện nào.',
+                style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+              ),
+            );
           }
 
           return ListView.builder(
             padding: const EdgeInsets.all(8),
             itemCount: chatProvider.chats.length,
             itemBuilder: (context, index) {
-              final chat = chatProvider.chats[index];
-              final otherUserName =
-                  chat.participantNames[chat.participants.firstWhere(
-                (id) => id != currentUserId,
+              final cuocTroChuyen = chatProvider.chats[index];
+
+              final maNguoiConLai = cuocTroChuyen.participants.firstWhere(
+                    (id) => id != maNguoiDungHienTai,
                 orElse: () => '',
-              )] ??
-                      'Unknown User';
+              );
+
+              final tenNguoiConLai =
+              cuocTroChuyen.participantNames[maNguoiConLai]?.trim().isNotEmpty ==
+                  true
+                  ? cuocTroChuyen.participantNames[maNguoiConLai]!.trim()
+                  : 'Người dùng';
+
+              final tinNhanCuoi = (cuocTroChuyen.lastMessage).trim().isEmpty
+                  ? 'Chưa có tin nhắn'
+                  : cuocTroChuyen.lastMessage;
+
+              final gioPhut =
+              DateFormat('HH:mm').format(cuocTroChuyen.lastMessageTime);
+
+              final soChuaDoc = (maNguoiDungHienTai == null)
+                  ? 0
+                  : (cuocTroChuyen.unreadCount[maNguoiDungHienTai] ?? 0);
 
               return Card(
-                color: Theme.of(context).colorScheme.surface,
-                margin:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                color: cs.surface,
+                margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                ),
                 child: ListTile(
                   contentPadding:
-                      const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                   leading: CircleAvatar(
                     radius: 28,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.secondary.withOpacity(0.2),
+                    backgroundColor: cs.secondary.withValues(alpha: 0.20),
                     child: Text(
-                      otherUserName.isNotEmpty ? otherUserName[0].toUpperCase() : '?',
+                      tenNguoiConLai.isNotEmpty ? tenNguoiConLai[0].toUpperCase() : '•',
                       style: TextStyle(
-                          color: Theme.of(context).colorScheme.secondary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20),
+                        color: cs.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
                     ),
                   ),
                   title: Text(
-                    otherUserName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    tenNguoiConLai,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface,
+                    ),
                   ),
                   subtitle: Text(
-                    chat.lastMessage,
+                    tinNhanCuoi,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.grey),
+                    style: TextStyle(color: cs.onSurface.withValues(alpha: 0.65)),
                   ),
                   trailing: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        DateFormat('HH:mm').format(chat.lastMessageTime),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
+                        gioPhut,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurface.withValues(alpha: 0.55),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      if ((chat.unreadCount[currentUserId] ?? 0) > 0)
+                      const SizedBox(height: 6),
+                      if (soChuaDoc > 0)
                         Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.secondary,
-                            shape: BoxShape.circle,
+                            color: cs.secondary,
+                            borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            chat.unreadCount[currentUserId].toString(),
-                            style: const TextStyle(
-                                color: Colors.black, fontSize: 10),
+                            soChuaDoc.toString(),
+                            style: TextStyle(
+                              color: cs.onSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
                     ],
                   ),
                   onTap: () {
+                    if (maNguoiDungHienTai == null || maNguoiDungHienTai.isEmpty) {
+                      return;
+                    }
+
                     Navigator.of(context).pushNamed(
                       '/chat',
                       arguments: {
-                        'chatId': chat.chatId,
-                        'currentUserId': currentUserId!,
-                        'otherUserName': otherUserName,
+                        'chatId': cuocTroChuyen.chatId,
+                        'currentUserId': maNguoiDungHienTai,
+                        'otherUserName': tenNguoiConLai,
                       },
                     );
                   },

@@ -4,10 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 class RevenueStatsScreen extends StatefulWidget {
-  const RevenueStatsScreen({Key? key}) : super(key: key);
+  const RevenueStatsScreen({super.key});
 
   @override
-  _RevenueStatsScreenState createState() => _RevenueStatsScreenState();
+  State<RevenueStatsScreen> createState() => _RevenueStatsScreenState();
 }
 
 class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
@@ -20,23 +20,40 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
   }
 
   Future<Map<String, dynamic>> _fetchStats() async {
-    final bookingProvider =
-        Provider.of<BookingProvider>(context, listen: false);
-    // Hardcoded hotelId for now
+    final bookingProvider = context.read<BookingProvider>();
+
+    // TODO: thay 'h1' bằng hotelId thật của chủ khách sạn
     const hotelId = 'h1';
 
-    final revenue =
-        await bookingProvider.calculateRevenue(hotelId: hotelId);
+    final revenue = await bookingProvider.calculateRevenue(hotelId: hotelId);
     final statistics = await bookingProvider.getStatistics(hotelId: hotelId);
 
-    return {'revenue': revenue, 'stats': statistics};
+    return <String, dynamic>{
+      'revenue': revenue,
+      'stats': statistics,
+    };
+  }
+
+  void _reload() {
+    setState(() {
+      _statsFuture = _fetchStats();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final currencyFormatter = NumberFormat('#,###', 'vi_VN');
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Revenue & Statistics'),
+        title: const Text('Doanh thu & Thống kê'),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Làm mới',
+          ),
+        ],
       ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _statsFuture,
@@ -46,29 +63,34 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
           }
 
           if (snapshot.hasError || !snapshot.hasData) {
-            return const Center(child: Text('Could not load statistics.'));
+            return const Center(child: Text('Không thể tải thống kê.'));
           }
 
           final data = snapshot.data!;
-          final double totalRevenue = data['revenue'];
-          final Map<String, int> stats = data['stats'];
-          final int totalBookings = stats['total'] ?? 0;
-          final double averageRevenue =
-              totalBookings > 0 ? totalRevenue / totalBookings : 0.0;
+          final double totalRevenue = (data['revenue'] as num?)?.toDouble() ?? 0;
+          final Map<String, int> stats =
+              (data['stats'] as Map<String, int>?) ?? <String, int>{};
 
-          final currencyFormatter = NumberFormat('#,###', 'vi_VN');
+          final int totalBookings = stats['total'] ?? 0;
+          final int confirmed = stats['confirmed'] ?? 0;
+          final int cancelled = stats['cancelled'] ?? 0;
+
+          final double averageRevenue =
+          totalBookings > 0 ? totalRevenue / totalBookings : 0.0;
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 _buildSummaryCard(
-                  title: 'Total Revenue',
+                  context: context,
+                  title: 'Tổng doanh thu',
                   value: '${currencyFormatter.format(totalRevenue)} VNĐ',
                   icon: Icons.attach_money,
                   color: Theme.of(context).colorScheme.secondary,
                 ),
                 const SizedBox(height: 16),
+
                 GridView.count(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -77,23 +99,27 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
                   mainAxisSpacing: 16,
                   children: [
                     _buildStatCard(
-                      title: 'Total Bookings',
+                      context: context,
+                      title: 'Tổng lượt đặt',
                       value: totalBookings.toString(),
                       icon: Icons.bookmark_border,
                     ),
                     _buildStatCard(
-                      title: 'Confirmed',
-                      value: (stats['confirmed'] ?? 0).toString(),
+                      context: context,
+                      title: 'Đã xác nhận',
+                      value: confirmed.toString(),
                       icon: Icons.check_circle_outline,
                     ),
                     _buildStatCard(
-                      title: 'Avg. Revenue',
+                      context: context,
+                      title: 'Doanh thu TB',
                       value: '${currencyFormatter.format(averageRevenue)} VNĐ',
                       icon: Icons.monetization_on_outlined,
                     ),
                     _buildStatCard(
-                      title: 'Cancelled',
-                      value: (stats['cancelled'] ?? 0).toString(),
+                      context: context,
+                      title: 'Đã huỷ',
+                      value: cancelled.toString(),
                       icon: Icons.cancel_outlined,
                     ),
                   ],
@@ -107,6 +133,7 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
   }
 
   Widget _buildSummaryCard({
+    required BuildContext context,
     required String title,
     required String value,
     required IconData icon,
@@ -117,27 +144,32 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: color,
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(24),
         child: Row(
           children: [
             Icon(icon, size: 48, color: Colors.black),
             const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(color: Colors.black54, fontSize: 16),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Colors.black54, fontSize: 16),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -146,21 +178,24 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
   }
 
   Widget _buildStatCard({
+    required BuildContext context,
     required String title,
     required String value,
     required IconData icon,
   }) {
+    final theme = Theme.of(context);
+
     return Card(
-      color: Theme.of(context).colorScheme.surface,
+      color: theme.colorScheme.surface,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, size: 36, color: Theme.of(context).colorScheme.secondary),
+            Icon(icon, size: 36, color: theme.colorScheme.secondary),
             const SizedBox(height: 8),
             Text(
               title,

@@ -1,87 +1,148 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:ui';
-import '../../providers/auth_providers.dart';
+
 import '../../models/user_model.dart';
+import '../../providers/auth_providers.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  const RegisterScreen({super.key});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final formKey = GlobalKey<FormState>();
 
-  bool _obscurePassword = true;
-  UserRole _selectedRole = UserRole.user;
+  final hoTenCtrl = TextEditingController();
+  final emailCtrl = TextEditingController();
+  final sdtCtrl = TextEditingController();
+  final matKhauCtrl = TextEditingController();
+  final nhapLaiMatKhauCtrl = TextEditingController();
+
+  bool anMatKhau = true;
+  UserRole vaiTroChon = UserRole.user;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
+    hoTenCtrl.dispose();
+    emailCtrl.dispose();
+    sdtCtrl.dispose();
+    matKhauCtrl.dispose();
+    nhapLaiMatKhauCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _handleRegister() async {
-    if (!_formKey.currentState!.validate()) return;
+  void thongBao(String noiDung, {bool laLoi = false}) {
+    if (!mounted) return;
+    final cs = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(noiDung),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: laLoi ? cs.errorContainer : cs.tertiaryContainer,
+      ),
+    );
+  }
+
+  Future<void> dangKy() async {
+    if (!formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
 
     try {
       await authProvider.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        name: _nameController.text.trim(),
-        role: _selectedRole,
-        phone: _phoneController.text.trim(),
+        email: emailCtrl.text.trim(),
+        password: matKhauCtrl.text,
+        name: hoTenCtrl.text.trim(),
+        role: vaiTroChon,
+        phone: sdtCtrl.text.trim().isEmpty ? null : sdtCtrl.text.trim(),
       );
-      // On success, AuthWrapper will handle navigation
+
+      if (!mounted) return;
+      thongBao('✅ Đăng ký thành công!');
+      Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(authProvider.errorMessage ?? 'Registration failed'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      thongBao(authProvider.errorMessage ?? '❌ Đăng ký thất bại: $e', laLoi: true);
     }
+  }
+
+  InputDecoration inputDeco(BuildContext context, String goiY) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final vien = cs.outlineVariant.withValues(alpha: isDark ? 0.30 : 0.45);
+
+    return InputDecoration(
+      hintText: goiY,
+      filled: true,
+      fillColor: isDark
+          ? cs.surface.withValues(alpha: 0.18)
+          : cs.surface.withValues(alpha: 0.85),
+      hintStyle: TextStyle(color: cs.onSurface.withValues(alpha: 0.70)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: vien),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: vien),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: cs.secondary, width: 1.6),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final nenPhu = isDark
+        ? cs.scrim.withValues(alpha: 0.65)
+        : cs.scrim.withValues(alpha: 0.35);
+
+    final nenThe = isDark
+        ? cs.surface.withValues(alpha: 0.20)
+        : cs.surface.withValues(alpha: 0.70);
+
+    final vienThe = isDark
+        ? cs.outlineVariant.withValues(alpha: 0.30)
+        : cs.outlineVariant.withValues(alpha: 0.45);
+
+    final mauChuChinh = cs.onSurface;
+    final mauChuPhu = cs.onSurface.withValues(alpha: 0.75);
 
     return Scaffold(
       body: Stack(
         children: [
-          // Background Image
-          Container(
-            decoration: const BoxDecoration(
-              image: DecorationImage(
-                image: NetworkImage('https://picsum.photos/seed/picsum/1920/1080'),
-                fit: BoxFit.cover,
+          // Ảnh nền
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: NetworkImage('https://picsum.photos/seed/register/1920/1080'),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
-          // Overlay
-          Container(
-            color: Colors.black.withOpacity(0.6),
-          ),
+
+          // Lớp phủ theo theme
+          Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(color: nenPhu))),
+
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(24),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: BackdropFilter(
@@ -89,136 +150,189 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.2),
+                        color: nenThe,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                        border: Border.all(color: vienThe),
+                        boxShadow: [
+                          BoxShadow(
+                            blurRadius: 24,
+                            color: cs.shadow.withValues(alpha: isDark ? 0.25 : 0.15),
+                          ),
+                        ],
                       ),
                       child: Form(
-                        key: _formKey,
+                        key: formKey,
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              'Create Account',
+                              'Tạo tài khoản',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                                color: mauChuChinh,
                               ),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Start your journey with us',
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(color: Colors.grey[300]),
+                              'Bắt đầu hành trình đặt phòng của bạn',
+                              style: theme.textTheme.titleMedium?.copyWith(color: mauChuPhu),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 24),
+
+                            // Họ tên
                             TextFormField(
-                              controller: _nameController,
-                              decoration: const InputDecoration(hintText: 'Full Name'),
+                              controller: hoTenCtrl,
+                              style: TextStyle(color: mauChuChinh),
+                              decoration: inputDeco(context, 'Họ và tên'),
                               validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter your name';
-                                }
+                                final v = (value ?? '').trim();
+                                if (v.isEmpty) return 'Vui lòng nhập họ và tên';
+                                if (v.length < 2) return 'Họ và tên quá ngắn';
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
+
+                            // Email
                             TextFormField(
-                              controller: _emailController,
+                              controller: emailCtrl,
                               keyboardType: TextInputType.emailAddress,
-                              decoration: const InputDecoration(hintText: 'Email'),
-                               validator: (value) {
-                                if (value == null || value.isEmpty || !value.contains('@')) {
-                                  return 'Please enter a valid email';
-                                }
+                              style: TextStyle(color: mauChuChinh),
+                              decoration: inputDeco(context, 'Email'),
+                              validator: (value) {
+                                final v = (value ?? '').trim();
+                                if (v.isEmpty) return 'Vui lòng nhập email';
+                                if (!v.contains('@')) return 'Email không hợp lệ';
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
+
+                            // SĐT
                             TextFormField(
-                              controller: _phoneController,
+                              controller: sdtCtrl,
                               keyboardType: TextInputType.phone,
-                              decoration: const InputDecoration(hintText: 'Phone Number (Optional)'),
+                              style: TextStyle(color: mauChuChinh),
+                              decoration: inputDeco(context, 'Số điện thoại (không bắt buộc)'),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
+
+                            // Mật khẩu
                             TextFormField(
-                              controller: _passwordController,
-                              obscureText: _obscurePassword,
-                              decoration: InputDecoration(
-                                hintText: 'Password',
+                              controller: matKhauCtrl,
+                              obscureText: anMatKhau,
+                              style: TextStyle(color: mauChuChinh),
+                              decoration: inputDeco(context, 'Mật khẩu').copyWith(
                                 suffixIcon: IconButton(
-                                  icon: Icon(_obscurePassword
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined),
-                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  icon: Icon(
+                                    anMatKhau
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                    color: mauChuPhu,
+                                  ),
+                                  onPressed: () => setState(() => anMatKhau = !anMatKhau),
                                 ),
                               ),
                               validator: (value) {
-                                if (value == null || value.isEmpty || value.length < 6) {
-                                  return 'Password must be at least 6 characters';
-                                }
+                                final v = value ?? '';
+                                if (v.isEmpty) return 'Vui lòng nhập mật khẩu';
+                                if (v.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
+
+                            // Nhập lại mật khẩu
                             TextFormField(
-                              controller: _confirmPasswordController,
+                              controller: nhapLaiMatKhauCtrl,
                               obscureText: true,
-                              decoration: const InputDecoration(hintText: 'Confirm Password'),
+                              style: TextStyle(color: mauChuChinh),
+                              decoration: inputDeco(context, 'Nhập lại mật khẩu'),
                               validator: (value) {
-                                if (value != _passwordController.text) {
-                                  return 'Passwords do not match';
+                                if ((value ?? '') != matKhauCtrl.text) {
+                                  return 'Mật khẩu nhập lại không khớp';
                                 }
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 24),
-                            Text('I am a...', style: theme.textTheme.titleMedium),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 18),
+
+                            Text(
+                              'Bạn là...',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: mauChuChinh,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+
                             Row(
                               children: [
                                 Expanded(
-                                  child: _buildRoleButton(
-                                      context, 'User', UserRole.user),
+                                  child: nutChonVaiTro(
+                                    context,
+                                    tieuDe: 'Khách đặt phòng',
+                                    role: UserRole.user,
+                                  ),
                                 ),
-                                const SizedBox(width: 16),
+                                const SizedBox(width: 12),
                                 Expanded(
-                                  child: _buildRoleButton(
-                                      context, 'Hotel Owner', UserRole.hotelOwner),
+                                  child: nutChonVaiTro(
+                                    context,
+                                    tieuDe: 'Chủ khách sạn',
+                                    role: UserRole.hotelOwner,
+                                  ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 32),
-                             Consumer<AuthProvider>(
+
+                            const SizedBox(height: 22),
+
+                            Consumer<AuthProvider>(
                               builder: (context, authProvider, _) {
+                                final dangTai = authProvider.isLoading;
                                 return ElevatedButton(
-                                  onPressed: authProvider.isLoading ? null : _handleRegister,
-                                  child: authProvider.isLoading
-                                      ? const SizedBox(
-                                          height: 24,
-                                          width: 24,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 3, color: Colors.black))
-                                      : const Text('Sign Up'),
+                                  onPressed: dangTai ? null : dangKy,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: cs.secondary,
+                                    foregroundColor: cs.onSecondary,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: dangTai
+                                      ? SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.6,
+                                      color: cs.onSecondary,
+                                    ),
+                                  )
+                                      : const Text('Đăng ký'),
                                 );
                               },
                             ),
-                            const SizedBox(height: 24),
+
+                            const SizedBox(height: 16),
+
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text("Already have an account? ",
-                                    style: TextStyle(color: Colors.grey)),
+                                Text(
+                                  'Đã có tài khoản? ',
+                                  style: TextStyle(color: mauChuPhu),
+                                ),
                                 TextButton(
                                   onPressed: () => Navigator.of(context).pop(),
                                   child: Text(
-                                    'Sign In',
+                                    'Đăng nhập',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      color: theme.colorScheme.secondary,
+                                      color: cs.secondary,
                                     ),
                                   ),
                                 ),
@@ -238,31 +352,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildRoleButton(BuildContext context, String title, UserRole role) {
-    final bool isSelected = _selectedRole == role;
+  Widget nutChonVaiTro(
+      BuildContext context, {
+        required String tieuDe,
+        required UserRole role,
+      }) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    final duocChon = vaiTroChon == role;
+
+    final vien = duocChon
+        ? cs.secondary
+        : cs.outlineVariant.withValues(alpha: theme.brightness == Brightness.dark ? 0.30 : 0.45);
+
+    final nen = duocChon ? cs.secondary.withValues(alpha: 0.16) : null;
+
+    final mauChu = duocChon ? cs.secondary : cs.onSurface.withValues(alpha: 0.75);
+
     return OutlinedButton(
-      onPressed: () {
-        setState(() {
-          _selectedRole = role;
-        });
-      },
+      onPressed: () => setState(() => vaiTroChon = role),
       style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        backgroundColor:
-            isSelected ? theme.colorScheme.secondary.withOpacity(0.2) : null,
-        side: BorderSide(
-          color: isSelected ? theme.colorScheme.secondary : Colors.grey,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        backgroundColor: nen,
+        side: BorderSide(color: vien),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: Text(
-        title,
-        style: TextStyle(
-          color: isSelected ? theme.colorScheme.secondary : Colors.grey,
-        ),
+        tieuDe,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: mauChu, fontWeight: FontWeight.w800),
       ),
     );
   }

@@ -3,84 +3,190 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({super.key}); // ✅ super.key
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
 
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     if (user == null) {
-      return const Scaffold(body: Center(child: Text('User not found.')));
+      return Scaffold(
+        appBar: AppBar(title: const Text('Hồ sơ')),
+        body: Center(
+          child: Text(
+            'Không tìm thấy thông tin người dùng.',
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
+          ),
+        ),
+      );
     }
 
+    final ten = (user.name).toString().trim();
+    final email = (user.email).toString().trim();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: const Text('Hồ sơ')),
       body: ListView(
         children: [
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Column(
               children: [
+                // Avatar
                 CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.grey.shade800,
-                  child: const Icon(
-                    Icons.person,
-                    size: 50,
-                    color: Colors.white,
+                  radius: 54,
+                  backgroundColor: cs.primary.withValues(alpha: 0.12),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: cs.surface,
+                    child: Icon(
+                      Icons.person,
+                      size: 52,
+                      color: cs.onSurface.withValues(alpha: 0.8),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Tên
                 Text(
-                  user.name,
-                  style: const TextStyle(
+                  ten.isNotEmpty ? ten : 'Người dùng',
+                  style: TextStyle(
                     fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w900,
+                    color: cs.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+
+                // Email
                 Text(
-                  user.email,
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  email.isNotEmpty ? email : 'Chưa có email',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    color: cs.onSurface.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
             ),
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.edit_outlined),
-            title: const Text('Edit Profile'),
-            trailing: const Icon(Icons.arrow_forward_ios),
+
+          Divider(
+            height: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.35),
+          ),
+
+          const SizedBox(height: 6),
+
+          _mucMenu(
+            context: context,
+            icon: Icons.edit_outlined,
+            tieuDe: 'Chỉnh sửa hồ sơ',
+            onTap: () => Navigator.of(context).pushNamed('/edit-profile'),
+          ),
+
+          _mucMenu(
+            context: context,
+            icon: Icons.lock_outline,
+            tieuDe: 'Đổi mật khẩu',
+            ghiChu: 'Sắp có',
             onTap: () {
-              Navigator.of(context).pushNamed('/edit-profile');
+              // TODO: điều hướng sang màn Đổi mật khẩu
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Change Password'),
-            trailing: const Icon(Icons.arrow_forward_ios),
+
+          _mucMenu(
+            context: context,
+            icon: Icons.notifications_outlined,
+            tieuDe: 'Thông báo',
+            ghiChu: 'Sắp có',
             onTap: () {
-              // TODO: Navigate to Change Password Screen
+              // TODO: điều hướng sang cài đặt thông báo
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: const Text('Notifications'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {
-              // TODO: Navigate to Notifications Settings Screen
-            },
+
+          const SizedBox(height: 8),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Card(
+              color: cs.surface,
+              elevation: isDark ? 0 : 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
+                ),
+              ),
+              child: ListTile(
+                leading: Icon(Icons.logout, color: cs.error),
+                title: Text(
+                  'Đăng xuất',
+                  style: TextStyle(
+                    color: cs.error,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                onTap: () => authProvider.signOut(context),
+              ),
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Logout', style: TextStyle(color: Colors.red)),
-            onTap: () {
-              authProvider.signOut(context);
-              // AuthWrapper will handle navigation
-            },
-          ),
+
+          const SizedBox(height: 14),
         ],
+      ),
+    );
+  }
+
+  Widget _mucMenu({
+    required BuildContext context,
+    required IconData icon,
+    required String tieuDe,
+    String? ghiChu,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Card(
+        color: cs.surface,
+        elevation: isDark ? 0 : 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
+          ),
+        ),
+        child: ListTile(
+          leading: Icon(icon, color: cs.secondary),
+          title: Text(
+            tieuDe,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface,
+            ),
+          ),
+          subtitle: (ghiChu != null && ghiChu.trim().isNotEmpty)
+              ? Text(
+            ghiChu,
+            style: TextStyle(color: cs.onSurface.withValues(alpha: 0.65)),
+          )
+              : null,
+          trailing: Icon(
+            Icons.arrow_forward_ios,
+            size: 16,
+            color: cs.onSurface.withValues(alpha: 0.55),
+          ),
+          onTap: onTap,
+        ),
       ),
     );
   }

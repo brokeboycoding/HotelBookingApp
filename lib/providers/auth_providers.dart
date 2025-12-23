@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:booking_app/providers/booking_providers.dart';
 import 'package:booking_app/providers/chat_providers.dart';
 import 'package:booking_app/providers/hotel_providers.dart';
@@ -6,6 +7,7 @@ import 'package:booking_app/providers/report_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+
 import '../models/user_model.dart';
 import '../services/auth_services.dart';
 import '../services/firebase_services.dart';
@@ -19,7 +21,7 @@ class AuthProvider extends ChangeNotifier {
   String? _errorMessage;
   StreamSubscription? _authSubscription;
 
-  // A flag to indicate the initial auth state check is complete.
+  // Flag: lần đầu mở app (đang check auth state)
   bool _isInit = true;
 
   // Getters
@@ -41,25 +43,25 @@ class AuthProvider extends ChangeNotifier {
   void _initAuthListener() {
     _authSubscription =
         _firebaseService.authStateChanges.listen((User? authUser) async {
-      // On initial app start, authUser might be null or a cached user.
-      if (_isInit) {
-        _isLoading = true;
-        notifyListeners();
-      }
+          // lần đầu mở app: hiển thị loading
+          if (_isInit) {
+            _isLoading = true;
+            notifyListeners();
+          }
 
-      if (authUser == null) {
-        _currentUser = null;
-      } else {
-        // If the user in provider is already the same, no need to reload.
-        if (_currentUser?.uid != authUser.uid) {
-          _currentUser = await _authService.getCurrentUserData();
-        }
-      }
+          if (authUser == null) {
+            _currentUser = null;
+          } else {
+            // nếu khác uid mới load lại dữ liệu
+            if (_currentUser?.uid != authUser.uid) {
+              _currentUser = await _authService.getCurrentUserData();
+            }
+          }
 
-      _isInit = false;
-      _isLoading = false;
-      notifyListeners();
-    });
+          _isInit = false;
+          _isLoading = false;
+          notifyListeners();
+        });
   }
 
   Future<void> signUp({
@@ -73,6 +75,7 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
+
       _currentUser = await _authService.signUp(
         email: email,
         password: password,
@@ -89,12 +92,17 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> signIn({required String email, required String password}) async {
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
-      _currentUser = await _authService.signIn(email: email, password: password);
+
+      _currentUser =
+      await _authService.signIn(email: email, password: password);
     } catch (e) {
       _errorMessage = e.toString();
       rethrow;
@@ -104,19 +112,36 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// ✅ FIX: Đăng xuất không bị quay mãi
+  /// - set loading đúng chuẩn try/finally
+  /// - điều hướng về '/auth' để thoát khỏi HomeScreen
   Future<void> signOut(BuildContext context) async {
     try {
-      // Clear all listeners from other providers before signing out
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      // Clear listeners của các provider khác trước khi sign out
       context.read<HotelProvider>().disposeListeners();
       context.read<BookingProvider>().disposeListeners();
       context.read<ChatProvider>().disposeListeners();
       context.read<ReportProvider>().disposeListeners();
 
       await _authService.signOut();
-      // The authStateChanges listener will handle setting the user to null.
+      // authStateChanges sẽ set _currentUser = null (ở listener)
+      // nhưng ta có thể set trước để UI update nhanh
+      _currentUser = null;
     } catch (e) {
       _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
       notifyListeners();
+    }
+
+    // ✅ QUAN TRỌNG: rời HomeScreen -> AuthWrapper
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/auth', (r) => false);
+      // Nếu bạn muốn về HomeBeforeLogin thì đổi thành '/intro'
     }
   }
 
@@ -126,6 +151,7 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
+
       await _authService.resetPassword(email);
       success = true;
     } catch (e) {
@@ -145,6 +171,7 @@ class AuthProvider extends ChangeNotifier {
       if (_currentUser == null) {
         throw 'User not logged in';
       }
+
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
@@ -157,7 +184,6 @@ class AuthProvider extends ChangeNotifier {
 
       // Update local user object
       _currentUser = _currentUser!.copyWith(name: name, phone: phone);
-
     } catch (e) {
       _errorMessage = e.toString();
       rethrow;
@@ -167,4 +193,3 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 }
-
