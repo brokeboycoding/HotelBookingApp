@@ -14,13 +14,17 @@ dependencies:
   firebase_core: ^4.3.0
   firebase_auth: ^6.1.3
   cloud_firestore: ^6.1.1
-  firebase_storage: ^13.0.5
+  
   firebase_messaging: ^16.1.0
   google_sign_in: ^6.2.1
   url_launcher: ^6.3.0
   shared_preferences: ^2.2.3
+
   # State Management
   provider: ^6.1.1
+  http_parser: ^4.0.2
+  # Network
+  http: ^1.2.2
 
   # UI & Maps
   google_maps_flutter: ^2.14.0
@@ -35,7 +39,6 @@ dependencies:
   intl: ^0.20.2
   uuid: ^4.2.1
   fluttertoast: ^9.0.0
-  http: ^1.1.2
 
 dev_dependencies:
   flutter_test:

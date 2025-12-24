@@ -1,76 +1,59 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
+
 import '../models/hotel_model.dart';
 import '../models/review_model.dart';
 import '../models/room_model.dart';
-import 'firebase_services.dart';
+import 'cloudinary_service.dart';
 
 class HotelService {
-  final FirebaseService _firebaseService = FirebaseService();
+  final FirebaseFirestore _db;
+  final CloudinaryService _cloudinary;
 
-  // HOTEL SERVICES
+  HotelService({FirebaseFirestore? db, CloudinaryService? cloudinary})
+      : _db = db ?? FirebaseFirestore.instance,
+        _cloudinary = cloudinary ?? CloudinaryService();
 
-  Future<String> _uploadImage(String hotelId, File imageFile) async {
-    String fileName =
-        'hotel_${hotelId}_${DateTime.now().millisecondsSinceEpoch}';
-    Reference ref = _firebaseService.storage
-        .ref()
-        .child('hotel_images')
-        .child(fileName);
-    UploadTask uploadTask = ref.putFile(imageFile);
-    TaskSnapshot snapshot = await uploadTask;
-    return await snapshot.ref.getDownloadURL();
+  CollectionReference<Map<String, dynamic>> get _hotelsCol =>
+      _db.collection('hotels');
+  CollectionReference<Map<String, dynamic>> get _roomsCol =>
+      _db.collection('rooms');
+  CollectionReference<Map<String, dynamic>> get _reviewsCol =>
+      _db.collection('reviews');
+
+  Future<List<String>> _uploadHotelImages(List<CloudinaryBytesFile> files) async {
+    if (files.isEmpty) return <String>[];
+    final urls = await Future.wait<String>(
+      files.map((f) => _cloudinary.uploadBytesFile(f)),
+    );
+    return urls;
   }
+
+  // ============================================================
+  // HOTEL CRUD
+  // ============================================================
 
   Future<void> createHotel({
     required String ownerId,
     required String name,
     required String description,
     required String address,
-    required GeoPoint location,
+    required dynamic location, // GeoPoint
     required List<String> amenities,
-    required List<File> imageFiles,
+    required List<CloudinaryBytesFile> imageFiles,
   }) async {
-    try {
-      DocumentReference hotelRef = await _firebaseService.hotelsCollection.add(
-        null,
-      );
+    final imageUrls = await _uploadHotelImages(imageFiles);
 
-      List<String> imageUrls = [];
-      for (var imageFile in imageFiles) {
-        String url = await _uploadImage(hotelRef.id, imageFile);
-        imageUrls.add(url);
-      }
-
-      HotelModel newHotel = HotelModel(
-        hotelId: hotelRef.id,
-        ownerId: ownerId,
-        name: name,
-        description: description,
-        address: address,
-        location: location,
-        amenities: amenities,
-        images: imageUrls,
-        rating: 0,
-        createdAt: DateTime.now(),
-      );
-
-      await hotelRef.set(newHotel.toMap());
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Stream<List<HotelModel>> getOwnerHotels(String ownerId) {
-    return _firebaseService.hotelsCollection
-        .where('ownerId', isEqualTo: ownerId)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => HotelModel.fromFirestore(doc))
-              .toList();
-        });
+    await _hotelsCol.add({
+      'ownerId': ownerId,
+      'name': name,
+      'description': description,
+      'address': address,
+      'location': location,
+      'amenities': amenities,
+      'imageUrls': imageUrls,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> updateHotel({
@@ -78,62 +61,67 @@ class HotelService {
     String? name,
     String? description,
     String? address,
-    GeoPoint? location,
+    dynamic location, // GeoPoint
     List<String>? amenities,
-    List<File>? newImages,
+    List<CloudinaryBytesFile>? newImages,
   }) async {
-    try {
-      Map<String, dynamic> updates = {};
-      if (name != null) updates['name'] = name;
-      if (description != null) updates['description'] = description;
-      if (address != null) updates['address'] = address;
-      if (location != null) updates['location'] = location;
-      if (amenities != null) updates['amenities'] = amenities;
+    final update = <String, dynamic>{};
 
-      if (newImages != null && newImages.isNotEmpty) {
-        List<String> newImageUrls = [];
-        for (var imageFile in newImages) {
-          String url = await _uploadImage(hotelId, imageFile);
-          newImageUrls.add(url);
-        }
-        updates['imageUrls'] = FieldValue.arrayUnion(newImageUrls);
-      }
+    if (name != null) update['name'] = name;
+    if (description != null) update['description'] = description;
+    if (address != null) update['address'] = address;
+    if (location != null) update['location'] = location;
+    if (amenities != null) update['amenities'] = amenities;
 
-      await _firebaseService.hotelsCollection.doc(hotelId).update(updates);
-    } catch (e) {
-      rethrow;
+    if (newImages != null && newImages.isNotEmpty) {
+      final newUrls = await _uploadHotelImages(newImages);
+      update['imageUrls'] = FieldValue.arrayUnion(newUrls);
     }
+
+    update['updatedAt'] = FieldValue.serverTimestamp();
+
+    if (update.isEmpty) return;
+    await _hotelsCol.doc(hotelId).update(update);
   }
 
   Future<void> deleteHotel(String hotelId) async {
-    try {
-      await _firebaseService.hotelsCollection.doc(hotelId).delete();
-      // Also delete rooms associated with the hotel
-      QuerySnapshot roomsSnapshot = await _firebaseService.roomsCollection
-          .where('hotelId', isEqualTo: hotelId)
-          .get();
-      for (var doc in roomsSnapshot.docs) {
-        await doc.reference.delete();
-      }
-    } catch (e) {
-      rethrow;
+    final roomsSnap = await _roomsCol.where('hotelId', isEqualTo: hotelId).get();
+
+    final batch = _db.batch();
+    for (final d in roomsSnap.docs) {
+      batch.delete(d.reference);
     }
+    batch.delete(_hotelsCol.doc(hotelId));
+
+    await batch.commit();
+  }
+
+  // ============================================================
+  // HOTEL STREAMS
+  // ============================================================
+
+  Stream<List<HotelModel>> getOwnerHotels(String ownerId) {
+    return _hotelsCol
+        .where('ownerId', isEqualTo: ownerId)
+        .snapshots()
+        .map((s) => s.docs.map((d) => HotelModel.fromFirestore(d)).toList());
+  }
+
+  Stream<List<HotelModel>> getAllHotels() {
+    return _hotelsCol
+        .snapshots()
+        .map((s) => s.docs.map((d) => HotelModel.fromFirestore(d)).toList());
   }
 
   Future<HotelModel?> getHotelById(String hotelId) async {
-    try {
-      DocumentSnapshot doc =
-          await _firebaseService.hotelsCollection.doc(hotelId).get();
-      if (doc.exists) {
-        return HotelModel.fromFirestore(doc);
-      }
-      return null;
-    } catch (e) {
-      rethrow;
-    }
+    final doc = await _hotelsCol.doc(hotelId).get();
+    if (!doc.exists) return null;
+    return HotelModel.fromFirestore(doc);
   }
 
-  // ROOM SERVICES
+  // ============================================================
+  // ROOM CRUD
+  // ============================================================
 
   Future<void> createRoom({
     required String hotelId,
@@ -145,51 +133,23 @@ class HotelService {
     required List<String> amenities,
     required List<String> imageUrls,
   }) async {
-    try {
-      DocumentReference roomRef = _firebaseService.roomsCollection.doc();
+    await _roomsCol.add({
+      'hotelId': hotelId,
+      'roomNumber': roomNumber,
+      'type': type,
+      'price': price,
+      'description': description,
+      'maxGuests': maxGuests,
+      'amenities': amenities,
+      'imageUrls': imageUrls,
 
-      RoomModel newRoom = RoomModel(
-        roomId: roomRef.id,
-        hotelId: hotelId,
-        roomNumber: roomNumber,
-        type: type,
-        price: price,
-        description: description,
-        images: imageUrls,
-        maxGuests: maxGuests,
-        amenities: amenities,
-        createdAt: DateTime.now(),
-      );
+      // Nếu bạn có quy trình duyệt phòng -> để 'pending'
+      // Nếu không duyệt -> để 'available'
+      'status': 'available',
 
-      await roomRef.set(newRoom.toMap());
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Stream<List<RoomModel>> getHotelRooms(String hotelId) {
-    return _firebaseService.roomsCollection
-        .where('hotelId', isEqualTo: hotelId)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => RoomModel.fromFirestore(doc))
-              .toList();
-        });
-  }
-
-  Future<RoomModel?> getRoomById(String roomId) async {
-    try {
-      DocumentSnapshot doc = await _firebaseService.roomsCollection
-          .doc(roomId)
-          .get();
-      if (doc.exists) {
-        return RoomModel.fromFirestore(doc);
-      }
-      return null;
-    } catch (e) {
-      rethrow;
-    }
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> updateRoom({
@@ -203,119 +163,103 @@ class HotelService {
     RoomStatus? status,
     List<String>? imageUrls,
   }) async {
-    try {
-      Map<String, dynamic> updates = {};
-      if (roomNumber != null) updates['roomNumber'] = roomNumber;
-      if (type != null) updates['type'] = type;
-      if (price != null) updates['price'] = price;
-      if (description != null) updates['description'] = description;
-      if (maxGuests != null) updates['maxGuests'] = maxGuests;
-      if (amenities != null) updates['amenities'] = amenities;
-      if (status != null) updates['status'] = status.name;
-      if (imageUrls != null) updates['images'] = imageUrls;
+    final update = <String, dynamic>{};
 
-      await _firebaseService.roomsCollection.doc(roomId).update(updates);
-    } catch (e) {
-      rethrow;
+    if (roomNumber != null) update['roomNumber'] = roomNumber;
+    if (type != null) update['type'] = type;
+    if (price != null) update['price'] = price;
+    if (description != null) update['description'] = description;
+    if (maxGuests != null) update['maxGuests'] = maxGuests;
+    if (amenities != null) update['amenities'] = amenities;
+    if (imageUrls != null) update['imageUrls'] = imageUrls;
+
+    if (status != null) {
+      update['status'] = status.toString().split('.').last; // enum -> string
     }
+
+    update['updatedAt'] = FieldValue.serverTimestamp();
+
+    if (update.isEmpty) return;
+    await _roomsCol.doc(roomId).update(update);
   }
 
   Future<void> deleteRoom(String roomId) async {
-    try {
-      await _firebaseService.roomsCollection.doc(roomId).delete();
-    } catch (e) {
-      rethrow;
-    }
+    await _roomsCol.doc(roomId).delete();
   }
 
-  Stream<List<ReviewModel>> getHotelReviews(String hotelId) {
-    return _firebaseService.roomsCollection
+  Future<RoomModel?> getRoomById(String roomId) async {
+    final doc = await _roomsCol.doc(roomId).get();
+    if (!doc.exists) return null;
+    return RoomModel.fromFirestore(doc);
+  }
+
+  // ============================================================
+  // ROOMS (HotelProvider đang gọi)
+  // ============================================================
+
+  /// ✅ HotelProvider.loadHotelRooms dùng hàm này
+  Stream<List<RoomModel>> getHotelRooms(String hotelId) {
+    return _roomsCol
         .where('hotelId', isEqualTo: hotelId)
         .snapshots()
-        .asyncMap((roomSnapshot) async {
-          List<ReviewModel> reviews = [];
-          for (var roomDoc in roomSnapshot.docs) {
-            QuerySnapshot reviewSnapshot = await _firebaseService
-                .reviewsCollection
-                .where('roomId', isEqualTo: roomDoc.id)
-                .get();
-            reviews.addAll(
-              reviewSnapshot.docs
-                  .map((doc) => ReviewModel.fromFirestore(doc))
-                  .toList(),
-            );
-          }
-          return reviews;
-        });
+        .map((s) => s.docs.map((d) => RoomModel.fromFirestore(d)).toList());
   }
 
+  /// ✅ HotelProvider.loadPendingRooms dùng hàm này
+  Stream<List<RoomModel>> getPendingRooms() {
+    return _roomsCol
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((s) => s.docs.map((d) => RoomModel.fromFirestore(d)).toList());
+  }
+
+  /// ✅ HotelProvider.updateRoomStatus dùng hàm này
+  Future<void> updateRoomStatus(String roomId, RoomStatus status) async {
+    final statusStr = status.toString().split('.').last;
+    await _roomsCol.doc(roomId).update({
+      'status': statusStr,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// ✅ HotelProvider.fetchAllRooms dùng hàm này
+  Future<List<RoomModel>> fetchAllRooms() async {
+    final snap = await _roomsCol.get();
+    return snap.docs.map((d) => RoomModel.fromFirestore(d)).toList();
+  }
+
+  /// ✅ HotelProvider.searchRooms dùng hàm này
+  /// (MVP: chỉ lọc status/hotelId; không kiểm tra trùng lịch booking)
   Future<List<RoomModel>> searchAvailableRooms({
     required DateTime checkIn,
     required DateTime checkOut,
     String? hotelId,
   }) async {
-    // 1. Find all bookings that overlap with the selected date range
-    QuerySnapshot bookingSnapshot = await _firebaseService.bookingsCollection
-        .where('checkInDate', isLessThan: checkOut)
-        .where('checkOutDate', isGreaterThan: checkIn)
-        .get();
+    Query<Map<String, dynamic>> q =
+    _roomsCol.where('status', isEqualTo: 'available');
 
-    List<String> unavailableRoomIds = bookingSnapshot.docs
-        .map((doc) => doc['roomId'] as String)
-        .toList();
-
-    // 2. Fetch all rooms (or rooms for a specific hotel)
-    Query query = _firebaseService.roomsCollection;
-    if (hotelId != null) {
-      query = query.where('hotelId', isEqualTo: hotelId);
+    if (hotelId != null && hotelId.trim().isNotEmpty) {
+      q = q.where('hotelId', isEqualTo: hotelId.trim());
     }
 
-    QuerySnapshot roomSnapshot = await query.get();
-
-    // 3. Filter out the unavailable rooms
-    List<RoomModel> allRooms = roomSnapshot.docs
-        .map((doc) => RoomModel.fromFirestore(doc))
-        .toList();
-
-    allRooms.removeWhere((room) => unavailableRoomIds.contains(room.roomId));
-
-    return allRooms;
+    final snap = await q.get();
+    return snap.docs.map((d) => RoomModel.fromFirestore(d)).toList();
   }
 
-  Future<List<RoomModel>> fetchAllRooms() async {
-    try {
-      QuerySnapshot snapshot = await _firebaseService.roomsCollection.get();
-      return snapshot.docs.map((doc) => RoomModel.fromFirestore(doc)).toList();
-    } catch (e) {
-      rethrow;
-    }
-  }
+  // ============================================================
+  // REVIEWS (HotelProvider đang gọi)
+  // ============================================================
 
-  // ADMIN-SPECIFIC METHODS
-
-  Stream<List<RoomModel>> getPendingRooms() {
-    return _firebaseService.roomsCollection
-        .where('status', isEqualTo: 'pending')
+  /// ✅ HotelProvider.loadHotelReviews dùng hàm này
+  Stream<List<ReviewModel>> getHotelReviews(String hotelId) {
+    return _reviewsCol
+        .where('hotelId', isEqualTo: hotelId)
+        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => RoomModel.fromFirestore(doc))
-              .toList();
-        });
+        .map((s) => s.docs.map((d) => ReviewModel.fromFirestore(d)).toList());
   }
 
-  Future<void> updateRoomStatus(String roomId, RoomStatus status) async {
-    try {
-      await _firebaseService.roomsCollection.doc(roomId).update({
-        'status': status.name,
-      });
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  // REVIEW SERVICES
-
+  /// ✅ HotelProvider.addReview đang gọi theo chữ ký này
   Future<void> addReview({
     required String roomId,
     required String userId,
@@ -324,21 +268,24 @@ class HotelService {
     required double rating,
     required String comment,
   }) async {
+    // Nếu ReviewModel của bạn có hotelId thì lấy room để suy ra hotelId
+    String? hotelId;
     try {
-      DocumentReference reviewRef = _firebaseService.reviewsCollection.doc();
-      ReviewModel newReview = ReviewModel(
-        reviewId: reviewRef.id,
-        userId: userId,
-        userName: userName,
-        userAvatarUrl: userAvatarUrl,
-        roomId: roomId,
-        rating: rating,
-        comment: comment,
-        createdAt: DateTime.now(),
-      );
-      await reviewRef.set(newReview.toMap());
-    } catch (e) {
-      rethrow;
+      final room = await getRoomById(roomId);
+      hotelId = room?.hotelId;
+    } catch (_) {
+      // bỏ qua
     }
+
+    await _reviewsCol.add({
+      'roomId': roomId,
+      if (hotelId != null) 'hotelId': hotelId,
+      'userId': userId,
+      'userName': userName,
+      'userAvatarUrl': userAvatarUrl,
+      'rating': rating,
+      'comment': comment,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 }

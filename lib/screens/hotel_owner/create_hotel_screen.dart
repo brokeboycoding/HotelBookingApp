@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/hotel_providers.dart';
+import '../../services/cloudinary_service.dart'; // ✅ THÊM
 
 class CreateHotelScreen extends StatefulWidget {
   const CreateHotelScreen({super.key});
@@ -23,7 +22,8 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
   final _descCtrl = TextEditingController();
   final _amenityCtrl = TextEditingController();
 
-  final List<File> _images = <File>[];
+  // ✅ ĐỔI File -> CloudinaryBytesFile
+  final List<CloudinaryBytesFile> _images = <CloudinaryBytesFile>[];
   final Set<String> _amenities = <String>{};
 
   static const List<String> _presetAmenities = <String>[
@@ -54,8 +54,20 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
     final picked = await picker.pickMultiImage(imageQuality: 85);
     if (picked.isEmpty) return;
 
+    // ✅ Convert XFile -> CloudinaryBytesFile (bytes)
+    final converted = await Future.wait<CloudinaryBytesFile>(
+      picked.map((x) async {
+        final bytes = await x.readAsBytes();
+        return CloudinaryBytesFile(
+          bytes: bytes,
+          fileName: x.name,     // ví dụ: IMG_001.jpg
+          mimeType: null,       // optional (Cloudinary vẫn upload được)
+        );
+      }),
+    );
+
     setState(() {
-      _images.addAll(picked.map((x) => File(x.path)));
+      _images.addAll(converted);
     });
   }
 
@@ -91,7 +103,6 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
       return;
     }
 
-    // ✅ BỎ KINH ĐỘ / VĨ ĐỘ: set mặc định
     final location = const GeoPoint(0, 0);
 
     final ok = await context.read<HotelProvider>().createHotel(
@@ -101,7 +112,7 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
       address: _addressCtrl.text.trim(),
       location: location,
       amenities: _amenities.toList(),
-      images: _images,
+      images: _images, // ✅ ĐÚNG KIỂU
     );
 
     if (!mounted) return;
@@ -182,6 +193,7 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
                   ),
                 ],
               ),
+
               if (_images.isNotEmpty)
                 Wrap(
                   spacing: 8,
@@ -191,8 +203,8 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            _images[i],
+                          child: Image.memory(
+                            _images[i].bytes, // ✅ preview từ bytes
                             width: 110,
                             height: 80,
                             fit: BoxFit.cover,
@@ -221,6 +233,7 @@ class _CreateHotelScreenState extends State<CreateHotelScreen> {
                     );
                   }),
                 ),
+
               const SizedBox(height: 16),
 
               // Tiện nghi

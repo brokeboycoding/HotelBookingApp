@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:io';
+
 import '../models/chat_model.dart';
 import 'firebase_services.dart';
+import 'cloudinary_service.dart';
 
 class ChatService {
   final FirebaseService _firebaseService = FirebaseService();
+  final CloudinaryService _cloudinary = CloudinaryService();
 
   // Tạo hoặc lấy chat giữa 2 người
   Future<String> getOrCreateChat({
@@ -15,7 +16,6 @@ class ChatService {
     required String ownerName,
   }) async {
     try {
-      // Kiểm tra xem chat đã tồn tại chưa
       QuerySnapshot existingChats = await _firebaseService.chatsCollection
           .where('participants', arrayContains: userId)
           .get();
@@ -27,7 +27,6 @@ class ChatService {
         }
       }
 
-      // Tạo chat mới
       ChatModel chat = ChatModel(
         chatId: '',
         participants: [userId, ownerId],
@@ -37,9 +36,8 @@ class ChatService {
         unreadCount: {userId: 0, ownerId: 0},
       );
 
-      DocumentReference docRef = await _firebaseService.chatsCollection.add(
-        chat.toMap(),
-      );
+      DocumentReference docRef =
+      await _firebaseService.chatsCollection.add(chat.toMap());
 
       return docRef.id;
     } catch (e) {
@@ -52,29 +50,31 @@ class ChatService {
     required String chatId,
     required String senderId,
     required String text,
-    File? imageFile,
+
+    /// ✅ ảnh dạng bytes (web + mobile)
+    CloudinaryBytesFile? imageFile,
   }) async {
     try {
       String? imageUrl;
 
-      // Upload ảnh nếu có
+      // ✅ Upload ảnh lên Cloudinary nếu có
       if (imageFile != null) {
-        String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-        Reference ref = _firebaseService.storage.ref().child(
-          'chat_images/$fileName',
+        imageUrl = await _cloudinary.uploadBytes(
+          imageFile.bytes,
+          fileName: imageFile.fileName,
+          mimeType: imageFile.mimeType,
+          folder: 'hotel_rooms/chat_images/$chatId',
         );
-
-        UploadTask uploadTask = ref.putFile(imageFile);
-        TaskSnapshot snapshot = await uploadTask;
-        imageUrl = await snapshot.ref.getDownloadURL();
       }
 
-      MessageModel message = MessageModel(
+      final message = MessageModel(
         messageId: '',
         senderId: senderId,
         text: text,
         timestamp: DateTime.now(),
         imageUrl: imageUrl,
+        // nếu MessageModel của bạn có isRead thì nên set mặc định:
+        // isRead: false,
       );
 
       // Thêm message vào subcollection
@@ -84,15 +84,14 @@ class ChatService {
           .add(message.toMap());
 
       // Cập nhật lastMessage trong chat
-      DocumentSnapshot chatDoc = await _firebaseService.chatsCollection
-          .doc(chatId)
-          .get();
-
-      ChatModel chat = ChatModel.fromFirestore(chatDoc);
-      String receiverId = chat.participants.firstWhere((id) => id != senderId);
+      final chatDoc = await _firebaseService.chatsCollection.doc(chatId).get();
+      final chat = ChatModel.fromFirestore(chatDoc);
+      final receiverId = chat.participants.firstWhere((id) => id != senderId);
 
       await _firebaseService.chatsCollection.doc(chatId).update({
-        'lastMessage': text.isEmpty ? '📷 Hình ảnh' : text,
+        'lastMessage': (text.trim().isEmpty && imageUrl != null)
+            ? '📷 Hình ảnh'
+            : text,
         'lastMessageTime': Timestamp.fromDate(DateTime.now()),
         'unreadCount.$receiverId': FieldValue.increment(1),
       });
@@ -108,10 +107,8 @@ class ChatService {
         .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => ChatModel.fromFirestore(doc))
-              .toList();
-        });
+      return snapshot.docs.map((doc) => ChatModel.fromFirestore(doc)).toList();
+    });
   }
 
   // Lấy danh sách tin nhắn
@@ -122,10 +119,10 @@ class ChatService {
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => MessageModel.fromFirestore(doc))
-              .toList();
-        });
+      return snapshot.docs
+          .map((doc) => MessageModel.fromFirestore(doc))
+          .toList();
+    });
   }
 
   // Đánh dấu đã đọc
@@ -135,7 +132,6 @@ class ChatService {
         'unreadCount.$userId': 0,
       });
 
-      // Đánh dấu tất cả tin nhắn là đã đọc
       QuerySnapshot messages = await _firebaseService.chatsCollection
           .doc(chatId)
           .collection('messages')
@@ -154,7 +150,6 @@ class ChatService {
   // Xóa chat
   Future<void> deleteChat(String chatId) async {
     try {
-      // Xóa tất cả messages
       QuerySnapshot messages = await _firebaseService.chatsCollection
           .doc(chatId)
           .collection('messages')
@@ -164,7 +159,6 @@ class ChatService {
         await doc.reference.delete();
       }
 
-      // Xóa chat
       await _firebaseService.chatsCollection.doc(chatId).delete();
     } catch (e) {
       throw 'Không thể xóa chat: $e';
@@ -177,12 +171,12 @@ class ChatService {
         .where('participants', arrayContains: userId)
         .snapshots()
         .map((snapshot) {
-          int total = 0;
-          for (var doc in snapshot.docs) {
-            ChatModel chat = ChatModel.fromFirestore(doc);
-            total += chat.unreadCount[userId] ?? 0;
-          }
-          return total;
-        });
+      int total = 0;
+      for (var doc in snapshot.docs) {
+        ChatModel chat = ChatModel.fromFirestore(doc);
+        total += chat.unreadCount[userId] ?? 0;
+      }
+      return total;
+    });
   }
 }

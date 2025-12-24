@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:booking_app/models/review_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../models/hotel_model.dart';
 import '../models/room_model.dart';
 import '../services/hotel_services.dart';
+import '../services/cloudinary_service.dart'; // ✅ thêm để dùng CloudinaryBytesFile
 
 class HotelProvider extends ChangeNotifier {
   final HotelService _hotelService = HotelService();
@@ -53,7 +53,9 @@ class HotelProvider extends ChangeNotifier {
     required String address,
     required GeoPoint location,
     required List<String> amenities,
-    required List<File> images,
+
+    /// ✅ đổi File -> CloudinaryBytesFile
+    required List<CloudinaryBytesFile> images,
   }) async {
     try {
       _isLoading = true;
@@ -67,6 +69,8 @@ class HotelProvider extends ChangeNotifier {
         address: address,
         location: location,
         amenities: amenities,
+
+        // ✅ service đang nhận imageFiles: List<CloudinaryBytesFile>
         imageFiles: images,
       );
 
@@ -88,7 +92,9 @@ class HotelProvider extends ChangeNotifier {
     String? address,
     GeoPoint? location,
     List<String>? amenities,
-    List<File>? newImages,
+
+    /// ✅ đổi File -> CloudinaryBytesFile
+    List<CloudinaryBytesFile>? newImages,
   }) async {
     try {
       _isLoading = true;
@@ -102,6 +108,8 @@ class HotelProvider extends ChangeNotifier {
         address: address,
         location: location,
         amenities: amenities,
+
+        // ✅ service đang nhận newImages: List<CloudinaryBytesFile>?
         newImages: newImages,
       );
 
@@ -239,7 +247,6 @@ class HotelProvider extends ChangeNotifier {
 
     _roomsSubscription = _hotelService.getHotelRooms(hotelId).listen(
           (rooms) {
-        // ✅ FIX: không gán list mới -> clear/addAll để _rooms có thể final
         _rooms
           ..clear()
           ..addAll(rooms);
@@ -293,7 +300,6 @@ class HotelProvider extends ChangeNotifier {
   // REVIEWS
   // ============================================================
 
-  // ✅ FIX: void -> Future<void> để await được
   Future<void> loadHotelReviews(String hotelId) async {
     _reviewsSubscription?.cancel();
 
@@ -365,7 +371,6 @@ class HotelProvider extends ChangeNotifier {
   // ADMIN
   // ============================================================
 
-  // ✅ FIX: void -> Future<void> để await được
   Future<void> loadPendingRooms() async {
     _roomsSubscription?.cancel();
 

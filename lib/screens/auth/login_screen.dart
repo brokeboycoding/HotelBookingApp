@@ -70,9 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void hienThongBao(String noiDung, {bool laLoi = true}) {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     final cs = Theme.of(context).colorScheme;
 
@@ -86,9 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> diSauDangNhap() async {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -96,12 +92,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> dangNhapBangEmail() async {
-    if (dangXuLy) {
-      return;
-    }
-    if (!formKey.currentState!.validate()) {
-      return;
-    }
+    if (dangXuLy) return;
+    if (!formKey.currentState!.validate()) return;
 
     setState(() => dangXuLy = true);
     final authProvider = context.read<AuthProvider>();
@@ -117,24 +109,16 @@ class _LoginScreenState extends State<LoginScreen> {
         await luuNguoiDungFirestore(user);
       }
 
-      // ✅ nếu bạn muốn theme chuyển theo vai trò sau đăng nhập:
-      // final role = context.read<AuthProvider>().currentUser?.role;
-      // context.read<ThemeProvider>().setCurrentRole(role);
-
       await diSauDangNhap();
     } catch (e) {
       hienThongBao(authProvider.errorMessage ?? 'Đăng nhập thất bại: $e');
     } finally {
-      if (mounted) {
-        setState(() => dangXuLy = false);
-      }
+      if (mounted) setState(() => dangXuLy = false);
     }
   }
 
   Future<void> dangNhapBangGoogle() async {
-    if (dangXuLy) {
-      return;
-    }
+    if (dangXuLy) return;
 
     setState(() => dangXuLy = true);
 
@@ -150,9 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await fb_auth.FirebaseAuth.instance.signInWithPopup(provider);
       } else {
         final googleUser = await GoogleSignIn().signIn();
-        if (googleUser == null) {
-          return;
-        }
+        if (googleUser == null) return;
 
         final googleAuth = await googleUser.authentication;
         final credential = fb_auth.GoogleAuthProvider.credential(
@@ -169,17 +151,11 @@ class _LoginScreenState extends State<LoginScreen> {
         await luuNguoiDungFirestore(user);
       }
 
-      // ✅ nếu bạn muốn theme chuyển theo vai trò sau đăng nhập:
-      // final role = context.read<AuthProvider>().currentUser?.role;
-      // context.read<ThemeProvider>().setCurrentRole(role);
-
       await diSauDangNhap();
     } catch (e) {
       hienThongBao('Lỗi đăng nhập Google: $e');
     } finally {
-      if (mounted) {
-        setState(() => dangXuLy = false);
-      }
+      if (mounted) setState(() => dangXuLy = false);
     }
   }
 
@@ -331,56 +307,17 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          Positioned.fill(
-            child: DecoratedBox(decoration: BoxDecoration(color: lopPhu)),
-          ),
 
-          // ✅ 2 nút góc
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Builder(
-                    builder: (context) {
-                      final canPop = Navigator.of(context).canPop();
-                      return nutGoc(
-                        icon: Icons.arrow_back,
-                        onTap: voHieuHoa
-                            ? null
-                            : () {
-                          if (canPop) {
-                            Navigator.of(context).pop();
-                          } else {
-                            Navigator.of(context)
-                                .pushReplacementNamed('/intro');
-                          }
-                        },
-                        cs: cs,
-                        isDark: isDark,
-                        tooltip: 'Quay lại',
-                      );
-                    },
-                  ),
-                  nutGoc(
-                    icon: isDark
-                        ? Icons.light_mode_outlined
-                        : Icons.dark_mode_outlined,
-                    onTap: voHieuHoa
-                        ? null
-                        : () {
-                      themeProvider.toggle(context);
-                    },
-                    cs: cs,
-                    isDark: isDark,
-                    tooltip: isDark ? 'Chế độ sáng' : 'Chế độ tối',
-                  ),
-                ],
+          // ✅ FIX 1: overlay không ăn touch
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: lopPhu),
               ),
             ),
           ),
 
+          // CONTENT (form) - nằm dưới
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -407,8 +344,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               boxShadow: [
                                 BoxShadow(
                                   blurRadius: 24,
-                                  color: cs.shadow
-                                      .withValues(alpha: isDark ? 0.25 : 0.12),
+                                  color: cs.shadow.withValues(
+                                      alpha: isDark ? 0.25 : 0.12),
                                 ),
                               ],
                             ),
@@ -434,7 +371,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 24),
-
                                   TextFormField(
                                     controller: emailCtrl,
                                     keyboardType: TextInputType.emailAddress,
@@ -443,9 +379,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     decoration: inputDeco('Email'),
                                     validator: (value) {
                                       final v = (value ?? '').trim();
-                                      if (v.isEmpty) {
-                                        return 'Vui lòng nhập email';
-                                      }
+                                      if (v.isEmpty) return 'Vui lòng nhập email';
                                       if (!v.contains('@')) {
                                         return 'Email không hợp lệ';
                                       }
@@ -453,15 +387,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 14),
-
                                   TextFormField(
                                     controller: matKhauCtrl,
                                     obscureText: anMatKhau,
                                     textInputAction: TextInputAction.done,
                                     onFieldSubmitted: (_) {
-                                      if (!voHieuHoa) {
-                                        dangNhapBangEmail();
-                                      }
+                                      if (!voHieuHoa) dangNhapBangEmail();
                                     },
                                     style: TextStyle(color: mauChuChinh),
                                     decoration: inputDeco('Mật khẩu').copyWith(
@@ -473,7 +404,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                           color: mauChuPhu,
                                         ),
                                         onPressed: () {
-                                          setState(() => anMatKhau = !anMatKhau);
+                                          setState(
+                                                  () => anMatKhau = !anMatKhau);
                                         },
                                       ),
                                     ),
@@ -488,7 +420,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                       return null;
                                     },
                                   ),
-
                                   const SizedBox(height: 8),
                                   Align(
                                     alignment: Alignment.centerRight,
@@ -502,7 +433,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 6),
-
                                   ElevatedButton(
                                     onPressed:
                                     voHieuHoa ? null : dangNhapBangEmail,
@@ -526,7 +456,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                         : const Text('Đăng nhập'),
                                   ),
-
                                   const SizedBox(height: 14),
                                   Row(
                                     children: [
@@ -543,7 +472,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 14),
-
                                   OutlinedButton(
                                     onPressed: voHieuHoa
                                         ? null
@@ -578,7 +506,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ],
                                     ),
                                   ),
-
                                   const SizedBox(height: 18),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -616,6 +543,49 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 );
               },
+            ),
+          ),
+
+          // ✅ FIX 2: Đặt 2 nút góc LÊN TRÊN CÙNG (stack child cuối) + Positioned
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    nutGoc(
+                      icon: Icons.arrow_back,
+                      onTap: voHieuHoa
+                          ? null
+                          : () {
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        } else {
+                          Navigator.of(context)
+                              .pushReplacementNamed('/intro');
+                        }
+                      },
+                      cs: cs,
+                      isDark: isDark,
+                      tooltip: 'Quay lại',
+                    ),
+                    nutGoc(
+                      icon: isDark
+                          ? Icons.light_mode_outlined
+                          : Icons.dark_mode_outlined,
+                      onTap:
+                      voHieuHoa ? null : () => themeProvider.toggle(context),
+                      cs: cs,
+                      isDark: isDark,
+                      tooltip: isDark ? 'Chế độ sáng' : 'Chế độ tối',
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

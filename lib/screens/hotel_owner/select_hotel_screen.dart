@@ -6,7 +6,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// ✅ NEW: màn tạo khách sạn
 import 'create_hotel_screen.dart';
 
 class SelectHotelScreen extends StatelessWidget {
@@ -44,7 +43,9 @@ class SelectHotelScreen extends StatelessWidget {
     final user = auth.currentUser;
 
     if (user == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final isOwner = user.role == UserRole.hotelOwner;
@@ -82,7 +83,7 @@ class SelectHotelScreen extends StatelessWidget {
 
           final hotels = snapshot.data ?? [];
 
-          // ✅ EMPTY STATE: chưa có khách sạn -> gợi ý tạo
+          // EMPTY STATE: chưa có khách sạn -> gợi ý tạo
           if (hotels.isEmpty) {
             return Center(
               child: Padding(
@@ -90,8 +91,11 @@ class SelectHotelScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.apartment_rounded,
-                        size: 64, color: cs.onSurface.withValues(alpha: 0.35)),
+                    Icon(
+                      Icons.apartment_rounded,
+                      size: 64,
+                      color: cs.onSurface.withValues(alpha: 0.35),
+                    ),
                     const SizedBox(height: 10),
                     Text(
                       'Bạn chưa có khách sạn nào.',
@@ -112,7 +116,7 @@ class SelectHotelScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
 
-                    // ✅ only owner mới có thể tạo
+                    // only owner mới có thể tạo
                     if (isOwner)
                       SizedBox(
                         width: double.infinity,
@@ -134,10 +138,35 @@ class SelectHotelScreen extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
               final h = hotels[i];
+              final thumbUrl =
+              (h.images.isNotEmpty ? h.images.first : '').trim();
 
               return Card(
                 child: ListTile(
-                  leading: const Icon(Icons.apartment_rounded),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: thumbUrl.isNotEmpty
+                        ? Image.network(
+                      thumbUrl,
+                      width: 52,
+                      height: 52,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 52,
+                        height: 52,
+                        color: cs.surfaceContainerHighest,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.apartment_rounded),
+                      ),
+                    )
+                        : Container(
+                      width: 52,
+                      height: 52,
+                      color: cs.surfaceContainerHighest,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.apartment_rounded),
+                    ),
+                  ),
                   title: Text(
                     h.name,
                     maxLines: 1,

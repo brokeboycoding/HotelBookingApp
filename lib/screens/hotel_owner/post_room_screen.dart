@@ -1,11 +1,10 @@
-import 'dart:io';
-
 import 'package:booking_app/models/room_model.dart';
 import 'package:booking_app/providers/hotel_providers.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
+import '../../services/cloudinary_service.dart';
 
 class PostRoomScreen extends StatefulWidget {
   final String hotelId;
@@ -34,8 +33,9 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
 
   final TextEditingController _amenityCtrl = TextEditingController();
 
-  final List<File> _newImages = <File>[];          // ảnh mới chọn (local)
-  final List<String> _imageUrls = <String>[];      // ảnh đã có (khi sửa) + ảnh đã upload
+  // ✅ bytes images
+  final List<CloudinaryBytesFile> _newImages = <CloudinaryBytesFile>[];
+  final List<String> _imageUrls = <String>[];
   final Set<String> _amenities = <String>{};
 
   bool _submitting = false;
@@ -87,14 +87,42 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     super.dispose();
   }
 
+  String _basename(String path) {
+    final p = path.replaceAll('\\', '/');
+    final parts = p.split('/');
+    return parts.isNotEmpty ? parts.last : 'image.jpg';
+  }
+
+  String? _guessMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    if (lower.endsWith('.heic') || lower.endsWith('.heif')) return 'image/heic';
+    return null;
+  }
+
   Future<void> _pickImages() async {
     final picker = ImagePicker();
     final picked = await picker.pickMultiImage(imageQuality: 85);
     if (picked.isEmpty) return;
 
-    setState(() {
-      _newImages.addAll(picked.map((x) => File(x.path)));
-    });
+    final files = <CloudinaryBytesFile>[];
+    for (final x in picked) {
+      final bytes = await x.readAsBytes();
+      final name = _basename(x.path);
+      files.add(
+        CloudinaryBytesFile(
+          bytes: bytes,
+          fileName: name,
+          mimeType: _guessMimeType(name),
+        ),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() => _newImages.addAll(files));
   }
 
   void _removeNewImage(int index) => setState(() => _newImages.removeAt(index));
@@ -128,27 +156,16 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     return int.tryParse(s.trim()) ?? fallback;
   }
 
+  // ✅ Upload ảnh mới bằng Cloudinary bytes
   Future<List<String>> _uploadNewImages() async {
     if (_newImages.isEmpty) return [];
 
-    final storage = FirebaseStorage.instance;
-    final List<String> urls = [];
+    final cloudinary = CloudinaryService();
+    final urls = await cloudinary.uploadManyBytes(
+      _newImages,
+      folder: 'hotel_rooms/rooms/${widget.hotelId}',
+    );
 
-    for (int i = 0; i < _newImages.length; i++) {
-      final file = _newImages[i];
-      final fileName =
-          'room_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-
-      final ref = storage
-          .ref()
-          .child('room_images')
-          .child(widget.hotelId)
-          .child(fileName);
-
-      final snap = await ref.putFile(file);
-      final url = await snap.ref.getDownloadURL();
-      urls.add(url);
-    }
     return urls;
   }
 
@@ -167,8 +184,8 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
       // upload ảnh mới -> lấy url
       final uploadedUrls = await _uploadNewImages();
       final finalImageUrls = <String>[
-        ..._imageUrls, // ảnh cũ còn giữ
-        ...uploadedUrls, // ảnh mới upload
+        ..._imageUrls,     // ảnh cũ còn giữ
+        ...uploadedUrls,   // ảnh mới upload
       ];
 
       final roomNumber = _roomNumberCtrl.text.trim();
@@ -201,6 +218,9 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
           imageUrls: finalImageUrls,
         );
       }
+
+      // ✅ clear ảnh local sau khi upload/lưu xong
+      _newImages.clear();
 
       if (!mounted) return;
 
@@ -246,7 +266,7 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
                 widget.hotelName?.trim().isNotEmpty == true
                     ? 'Khách sạn: ${widget.hotelName}'
                     : 'hotelId: ${widget.hotelId}',
-                style: TextStyle(color: cs.onSurface.withValues(alpha:0.7)),
+                style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
               ),
               const SizedBox(height: 12),
 
@@ -315,7 +335,8 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Ảnh phòng', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Ảnh phòng',
+                      style: Theme.of(context).textTheme.titleMedium),
                   TextButton.icon(
                     onPressed: _submitting ? null : _pickImages,
                     icon: const Icon(Icons.add_photo_alternate_outlined),
@@ -357,7 +378,7 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha:0.55),
+                                color: Colors.black.withValues(alpha: 0.55),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: const Icon(Icons.close,
@@ -370,7 +391,7 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
                   }),
                 ),
 
-              // ảnh mới chọn (local)
+              // ảnh mới chọn (bytes)
               if (_newImages.isNotEmpty) ...[
                 if (_imageUrls.isNotEmpty) const SizedBox(height: 8),
                 Wrap(
@@ -381,8 +402,8 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            _newImages[i],
+                          child: Image.memory(
+                            _newImages[i].bytes,
                             width: 110,
                             height: 80,
                             fit: BoxFit.cover,
@@ -396,7 +417,7 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha:0.55),
+                                color: Colors.black.withValues(alpha: 0.55),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: const Icon(Icons.close,
