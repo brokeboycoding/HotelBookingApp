@@ -27,6 +27,7 @@ import 'package:booking_app/screens/hotel_owner/manage_rooms_screen.dart';
 import 'package:booking_app/screens/hotel_owner/post_room_screen.dart';
 import 'package:booking_app/screens/hotel_owner/revenue_stats_screen.dart';
 import 'package:booking_app/screens/hotel_owner/reviews_screen.dart';
+import 'package:booking_app/screens/admin/room_detail_admin_screen.dart';
 
 // ✅ NEW: màn chọn khách sạn
 import 'package:booking_app/screens/hotel_owner/select_hotel_screen.dart';
@@ -222,6 +223,48 @@ class MyApp extends StatelessWidget {
                 hotelId: hotelId,
                 hotelName:
                 (hotelName != null && hotelName.isNotEmpty) ? hotelName : null,
+              ),
+            );
+          }
+          case '/room-detail': {
+            final args = settings.arguments;
+            final hotelId = _readHotelId(args);
+            final hotelName = _readHotelName(args);
+            final room = _readRoom(args);
+
+            if (room == null) {
+              return MaterialPageRoute(
+                builder: (_) => _routeError(
+                  "Thiếu RoomModel cho '/room-detail'.\n\n"
+                      "Gọi đúng:\n"
+                      "Navigator.pushNamed(context, '/room-detail', arguments: {\n"
+                      "  'hotelId': hotelId,\n"
+                      "  'hotelName': hotelName,\n"
+                      "  'room': room,\n"
+                      "});",
+                ),
+              );
+            }
+
+            // ✅ lấy hotelId từ args hoặc fallback từ room.hotelId
+            final effectiveHotelId = (hotelId != null && hotelId.isNotEmpty)
+                ? hotelId
+                : room.hotelId;
+
+            if (effectiveHotelId.isEmpty) {
+              return MaterialPageRoute(
+                builder: (_) => _routeError(
+                  "Thiếu hotelId cho '/room-detail'.\n\n"
+                      "Hãy truyền Map {'hotelId','hotelName','room'} hoặc đảm bảo room.hotelId có dữ liệu.",
+                ),
+              );
+            }
+
+            return MaterialPageRoute(
+              builder: (_) => AdminRoomDetailScreen(
+                hotelId: effectiveHotelId,
+                hotelName: (hotelName != null && hotelName.isNotEmpty) ? hotelName : null,
+                room: room,
               ),
             );
           }

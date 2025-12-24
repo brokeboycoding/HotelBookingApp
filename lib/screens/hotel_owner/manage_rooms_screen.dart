@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/hotel_providers.dart';
+import '../../models/room_model.dart';
 
 class ManageRoomsScreen extends StatefulWidget {
   final String hotelId;
@@ -161,7 +162,7 @@ class _ManageRoomsScreenState extends State<ManageRoomsScreen> {
               padding: const EdgeInsets.all(16),
               itemCount: hotelProvider.rooms.length,
               itemBuilder: (context, i) {
-                final phong = hotelProvider.rooms[i];
+                final RoomModel phong = hotelProvider.rooms[i];
 
                 final String imageUrl =
                 phong.images.isNotEmpty ? phong.images.first.toString() : '';
@@ -175,7 +176,6 @@ class _ManageRoomsScreenState extends State<ManageRoomsScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                     side: BorderSide(
-                      // ✅ FIX: bỏ "..withValues" (sai)
                       color: cs.outlineVariant.withValues(
                         alpha: isDark ? 0.25 : 0.6,
                       ),
@@ -187,6 +187,17 @@ class _ManageRoomsScreenState extends State<ManageRoomsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ListTile(
+                          // ✅ NEW: bấm vào card để xem chi tiết
+                          onTap: () {
+                            Navigator.of(context).pushNamed(
+                              '/room-detail',
+                              arguments: {
+                                'hotelId': widget.hotelId,
+                                'hotelName': widget.hotelName,
+                                'room': phong,
+                              },
+                            );
+                          },
                           contentPadding: EdgeInsets.zero,
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(10),
@@ -203,7 +214,8 @@ class _ManageRoomsScreenState extends State<ManageRoomsScreen> {
                                   : Image.network(
                                 imageUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
+                                errorBuilder:
+                                    (context, error, stackTrace) {
                                   return Icon(
                                     Icons.broken_image_outlined,
                                     color: cs.onSurfaceVariant,
@@ -249,7 +261,6 @@ class _ManageRoomsScreenState extends State<ManageRoomsScreen> {
                               icon: const Icon(Icons.edit, size: 18),
                               label: const Text('Sửa'),
                               onPressed: () {
-                                // ✅ truyền Map để main.dart đọc đủ hotelId/hotelName/room
                                 Navigator.of(context).pushNamed(
                                   '/edit-room',
                                   arguments: {
