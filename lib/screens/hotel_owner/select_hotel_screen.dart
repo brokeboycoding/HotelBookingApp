@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'create_hotel_screen.dart';
 
-class SelectHotelScreen extends StatelessWidget {
+class SelectHotelScreen extends StatefulWidget {
   final String targetRoute; // '/manage-rooms' hoặc '/post-room'
   final String title;
 
@@ -18,13 +18,24 @@ class SelectHotelScreen extends StatelessWidget {
     required this.title,
   });
 
+  @override
+  State<SelectHotelScreen> createState() => _SelectHotelScreenState();
+}
+
+class _SelectHotelScreenState extends State<SelectHotelScreen> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Stream<List<HotelModel>> _streamHotels(UserModel user) {
-    // Chủ khách sạn -> chỉ lấy hotel của owner
     if (user.role == UserRole.hotelOwner) {
       return HotelService().getOwnerHotels(user.uid);
     }
 
-    // Admin -> lấy tất cả hotels
     return FirebaseFirestore.instance.collection('hotels').snapshots().map(
           (s) => s.docs.map((d) => HotelModel.fromFirestore(d)).toList(),
     );
@@ -51,16 +62,24 @@ class SelectHotelScreen extends StatelessWidget {
     final isOwner = user.role == UserRole.hotelOwner;
 
     return Scaffold(
+      backgroundColor: cs.surfaceContainerLowest,
       appBar: AppBar(
-        title: Text(title),
-        actions: [
-          if (isOwner)
-            IconButton(
-              tooltip: 'Tạo khách sạn',
+        title: Text(widget.title),
+        centerTitle: true,
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: SizedBox(
+            height: 52,
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: isOwner ? () => _openCreateHotel(context) : null,
               icon: const Icon(Icons.add_business_rounded),
-              onPressed: () => _openCreateHotel(context),
+              label: const Text('Thêm khách sạn'),
             ),
-        ],
+          ),
+        ),
       ),
       body: StreamBuilder<List<HotelModel>>(
         stream: _streamHotels(user),
@@ -83,115 +102,136 @@ class SelectHotelScreen extends StatelessWidget {
 
           final hotels = snapshot.data ?? [];
 
-          // EMPTY STATE: chưa có khách sạn -> gợi ý tạo
-          if (hotels.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.apartment_rounded,
-                      size: 64,
-                      color: cs.onSurface.withValues(alpha: 0.35),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Bạn chưa có khách sạn nào.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Hãy tạo khách sạn trước rồi quay lại.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: cs.onSurface.withValues(alpha: 0.75),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
+          final q = _searchCtrl.text.trim().toLowerCase();
+          final filtered = q.isEmpty
+              ? hotels
+              : hotels.where((h) {
+            final s = '${h.name} ${h.address}'.toLowerCase();
+            return s.contains(q);
+          }).toList(growable: false);
 
-                    // only owner mới có thể tạo
-                    if (isOwner)
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () => _openCreateHotel(context),
-                          icon: const Icon(Icons.add_business_rounded),
-                          label: const Text('Tạo khách sạn ngay'),
-                        ),
-                      ),
-                  ],
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+            children: [
+              TextField(
+                controller: _searchCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'Tìm kiếm theo tên khách sạn…',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  filled: true,
+                  fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: cs.primary, width: 1.6),
+                  ),
                 ),
               ),
-            );
-          }
+              const SizedBox(height: 12),
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: hotels.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, i) {
-              final h = hotels[i];
-              final thumbUrl =
-              (h.images.isNotEmpty ? h.images.first : '').trim();
-
-              return Card(
-                child: ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: thumbUrl.isNotEmpty
-                        ? Image.network(
-                      thumbUrl,
-                      width: 52,
-                      height: 52,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 52,
-                        height: 52,
-                        color: cs.surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.apartment_rounded),
+              if (hotels.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 80),
+                  child: Center(
+                    child: Text(
+                      'Bạn chưa có khách sạn nào.',
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.75),
+                        fontWeight: FontWeight.w700,
                       ),
-                    )
-                        : Container(
-                      width: 52,
-                      height: 52,
-                      color: cs.surfaceContainerHighest,
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.apartment_rounded),
                     ),
                   ),
-                  title: Text(
-                    h.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                )
+              else if (filtered.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 80),
+                  child: Center(
+                    child: Text(
+                      'Không tìm thấy khách sạn.',
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.75),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                  subtitle: Text(
-                    h.address,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () {
-                    Navigator.pushReplacementNamed(
-                      context,
-                      targetRoute,
-                      arguments: {
-                        'hotelId': h.hotelId,
-                        'hotelName': h.name,
-                      },
-                    );
-                  },
-                ),
-              );
-            },
+                )
+              else
+                ...filtered.map((h) {
+                  final thumbUrl = (h.images.isNotEmpty ? h.images.first : '').trim();
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(
+                          color: cs.outlineVariant.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: thumbUrl.isNotEmpty
+                              ? Image.network(
+                            thumbUrl,
+                            width: 54,
+                            height: 54,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 54,
+                              height: 54,
+                              color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                              alignment: Alignment.center,
+                              child: const Icon(Icons.apartment_rounded),
+                            ),
+                          )
+                              : Container(
+                            width: 54,
+                            height: 54,
+                            color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.apartment_rounded),
+                          ),
+                        ),
+                        title: Text(
+                          h.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        subtitle: Text(
+                          h.address,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            widget.targetRoute,
+                            arguments: {
+                              'hotelId': h.hotelId,
+                              'hotelName': h.name,
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                }).toList(),
+            ],
           );
         },
       ),

@@ -1,44 +1,29 @@
+import 'package:booking_app/models/room_model.dart';
+import 'package:booking_app/providers/auth_providers.dart';
+import 'package:booking_app/providers/booking_providers.dart';
+import 'package:booking_app/widgets/ui/app_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-
-import '../../models/room_model.dart';
-import '../../providers/booking_providers.dart';
-import '../../providers/auth_providers.dart';
-
-// ✅ Nếu bạn đã có provider đổi theme thì import nó ở đây
-// Ví dụ: import '../../providers/giao_dien_providers.dart';
+import 'package:provider/provider.dart';
 
 class BookingScreen extends StatefulWidget {
-  final RoomModel room;
+  const BookingScreen({super.key, required this.room});
 
-  const BookingScreen({
-    super.key,
-    required this.room,
-  });
+  static const routeName = '/booking';
+
+  final RoomModel room;
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
 }
 
 class _BookingScreenState extends State<BookingScreen> {
-  // TODO: thay bằng tên khách sạn thật (lấy từ room/hotel collection)
-  final String _tenKhachSan = 'Khách sạn';
-
   DateTime? _ngayNhanPhong;
   DateTime? _ngayTraPhong;
 
   final _ghiChuCtrl = TextEditingController();
 
-  String _phuongThucThanhToan = 'Thẻ tín dụng';
-
-  final List<String> _dsPhuongThucThanhToan = const [
-    'Thẻ tín dụng',
-    'Thẻ ghi nợ',
-    'Chuyển khoản ngân hàng',
-    'Ví điện tử',
-    'Tiền mặt',
-  ];
+  String _payment = 'Thẻ tín dụng / Ghi nợ';
 
   @override
   void dispose() {
@@ -54,6 +39,7 @@ class _BookingScreenState extends State<BookingScreen> {
           noiDung,
           style: TextStyle(
             color: laLoi ? cs.onErrorContainer : cs.onTertiaryContainer,
+            fontWeight: FontWeight.w600,
           ),
         ),
         behavior: SnackBarBehavior.floating,
@@ -62,39 +48,8 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  // ✅ Dialog xác nhận đăng xuất
-  void _xacNhanDangXuat() {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          title: const Text('Đăng xuất'),
-          content: const Text('Bạn có chắc muốn đăng xuất không?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Hủy'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: cs.error),
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                // ✅ AuthProvider của bạn đang có signOut(context) ở các màn khác
-                await context.read<AuthProvider>().signOut(context);
-              },
-              child: Text('Đăng xuất', style: TextStyle(color: cs.onError)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _chonNgay(BuildContext context, {required bool laNhanPhong}) async {
+  Future<void> _chonNgay({required bool laNhanPhong}) async {
     final theme = Theme.of(context);
-
     final initial = laNhanPhong
         ? (_ngayNhanPhong ?? DateTime.now())
         : (_ngayTraPhong ??
@@ -113,8 +68,7 @@ class _BookingScreenState extends State<BookingScreen> {
         return Theme(
           data: theme.copyWith(
             colorScheme: theme.colorScheme.copyWith(
-              primary: theme.colorScheme.secondary,
-              onPrimary: theme.colorScheme.onSecondary,
+              primary: theme.colorScheme.primary,
             ),
           ),
           child: child!,
@@ -122,8 +76,7 @@ class _BookingScreenState extends State<BookingScreen> {
       },
     );
 
-    if (picked == null) return;
-    if (!mounted) return;
+    if (picked == null || !mounted) return;
 
     setState(() {
       if (laNhanPhong) {
@@ -146,22 +99,20 @@ class _BookingScreenState extends State<BookingScreen> {
   double get _tongTien => widget.room.price * _soDem;
 
   Future<void> _datPhong() async {
-    FocusScope.of(context).unfocus(); // ✅ ẩn bàn phím
+    FocusScope.of(context).unfocus();
 
     if (_ngayNhanPhong == null || _ngayTraPhong == null || _soDem <= 0) {
       _thongBao('Vui lòng chọn ngày nhận phòng và ngày trả phòng hợp lệ.');
       return;
     }
 
-    final authProvider = context.read<AuthProvider>();
-    final bookingProvider = context.read<BookingProvider>();
-
-    final uid = authProvider.currentUser?.uid;
+    final uid = context.read<AuthProvider>().currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       _thongBao('Bạn cần đăng nhập để đặt phòng.', laLoi: true);
       return;
     }
 
+    final bookingProvider = context.read<BookingProvider>();
     try {
       final bookingId = await bookingProvider.createBooking(
         userId: uid,
@@ -174,14 +125,14 @@ class _BookingScreenState extends State<BookingScreen> {
 
       if (!mounted || bookingId == null) return;
 
-      final thanhToanOk = await bookingProvider.makePayment(
+      final ok = await bookingProvider.makePayment(
         bookingId: bookingId,
-        paymentMethod: _phuongThucThanhToan,
+        paymentMethod: _payment,
       );
 
       if (!mounted) return;
 
-      if (thanhToanOk) {
+      if (ok) {
         _hienDialogThanhCong();
       } else {
         throw Exception(bookingProvider.errorMessage ?? 'Thanh toán thất bại');
@@ -202,7 +153,7 @@ class _BookingScreenState extends State<BookingScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('Đặt phòng thành công!'),
           content: const Text(
-            'Đơn đặt phòng của bạn đã được xác nhận. Bạn có thể xem lại trong mục “Đơn của tôi”.',
+            'Đơn đặt phòng của bạn đã được xác nhận. Bạn có thể xem lại trong mục “Đơn đặt phòng”.',
           ),
           actions: [
             TextButton(
@@ -210,10 +161,10 @@ class _BookingScreenState extends State<BookingScreen> {
                 Navigator.of(ctx).pop();
                 Navigator.of(context).pushNamedAndRemoveUntil(
                   '/my-bookings',
-                      (Route<dynamic> route) => route.isFirst,
+                      (route) => route.isFirst,
                 );
               },
-              child: Text('Xem đơn của tôi', style: TextStyle(color: cs.secondary)),
+              child: Text('Xem đơn đặt phòng', style: TextStyle(color: cs.primary)),
             ),
           ],
         );
@@ -223,215 +174,253 @@ class _BookingScreenState extends State<BookingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final money = NumberFormat('#,###', 'vi_VN');
+    final imageUrl = widget.room.images.isNotEmpty ? widget.room.images.first : '';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Xác nhận đặt phòng'),
-        actions: [
-          // ✅ Nút đổi Sáng/Tối (nếu bạn có ThemeProvider)
-          IconButton(
-            tooltip: isDark ? 'Chuyển sang sáng' : 'Chuyển sang tối',
-            icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-            onPressed: () {
-              // ⚠️ Đổi dòng này theo provider theme của bạn
-              // context.read<GiaoDienProvider>().doiSangToi();
-
-              // Nếu bạn CHƯA có provider đổi theme thì để tạm thông báo:
-              _thongBao('Bạn chưa tích hợp Provider đổi Sáng/Tối.', laLoi: true);
-            },
-          ),
-          IconButton(
-            tooltip: 'Đăng xuất',
-            icon: const Icon(Icons.logout),
-            onPressed: _xacNhanDangXuat,
-          ),
-        ],
+      appBar: AppBar(title: const Text('Xác nhận đặt phòng')),
+      bottomNavigationBar: Consumer<BookingProvider>(
+        builder: (context, p, _) => AppBottomPrimaryButton(
+          text: 'Xác nhận đặt phòng',
+          isLoading: p.isLoading,
+          onPressed: p.isLoading ? null : _datPhong,
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _khungThongTinPhong(theme),
-            const SizedBox(height: 24),
-            _chonNgayNhanTra(context),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _ghiChuCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Ghi chú / Yêu cầu đặc biệt',
-                hintText: 'Ví dụ: Nhận phòng muộn, cần thêm gối…',
-                prefixIcon: Icon(Icons.edit_note_outlined),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-
-            // ✅ ĐÃ DÙNG initialValue -> hết lỗi "value deprecated"
-            DropdownButtonFormField<String>(
-              initialValue: _phuongThucThanhToan,
-              decoration: const InputDecoration(
-                labelText: 'Phương thức thanh toán',
-                prefixIcon: Icon(Icons.payment_outlined),
-              ),
-              items: _dsPhuongThucThanhToan
-                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                  .toList(),
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _phuongThucThanhToan = value);
-              },
-            ),
-
-            const SizedBox(height: 10),
-            Text(
-              'Lưu ý: Đây là mô phỏng phương thức thanh toán trong ứng dụng.',
-              style: TextStyle(
-                color: cs.onSurface.withValues(alpha: 0.65),
-                fontSize: 12.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _tongKetGia(theme),
-    );
-  }
-
-  Widget _khungThongTinPhong(ThemeData theme) {
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    final imageUrl = widget.room.images.isNotEmpty ? widget.room.images.first : '';
-
-    return Card(
-      color: cs.surface,
-      elevation: isDark ? 0 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 100,
-                height: 100,
-                child: imageUrl.isEmpty
-                    ? Container(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.image_not_supported_outlined, color: cs.onSurfaceVariant),
-                )
-                    : Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                    alignment: Alignment.center,
-                    child: Icon(Icons.broken_image_outlined, color: cs.onSurfaceVariant),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            AppCard(
+              child: Row(
                 children: [
-                  Text(
-                    _tenKhachSan,
-                    style: TextStyle(fontSize: 14, color: cs.onSurface.withValues(alpha: 0.7)),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.room.type,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: cs.onSurface,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: SizedBox(
+                      width: 78,
+                      height: 78,
+                      child: imageUrl.trim().isEmpty
+                          ? _thumbFallback(cs)
+                          : Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _thumbFallback(cs),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Mã khách sạn: ${widget.room.hotelId}',
-                    style: TextStyle(color: cs.onSurface.withValues(alpha: 0.65)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Khách sạn',
+                          style: TextStyle(
+                            color: cs.onSurface.withValues(alpha: 0.65),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Phòng ${widget.room.type}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.w900,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Mã: ${widget.room.hotelId}',
+                          style: TextStyle(
+                            color: cs.onSurface.withValues(alpha: 0.65),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            )
+            ),
+
+            const SizedBox(height: 18),
+            Text(
+              'Thời gian lưu trú',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _DateBox(
+                    label: 'Ngày nhận phòng',
+                    value: _ngayNhanPhong,
+                    onTap: () => _chonNgay(laNhanPhong: true),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _DateBox(
+                    label: 'Ngày trả phòng',
+                    value: _ngayTraPhong,
+                    onTap: () => _chonNgay(laNhanPhong: false),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (_soDem > 0)
+              Align(
+                alignment: Alignment.centerRight,
+                child: AppPill(text: '$_soDem đêm', color: cs.primary),
+              ),
+
+            const SizedBox(height: 18),
+            Text(
+              'Ghi chú/Yêu cầu đặc biệt',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _ghiChuCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Ví dụ: Phòng không hút thuốc, check-in muộn...',
+              ),
+            ),
+
+            const SizedBox(height: 18),
+            Text(
+              'Phương thức thanh toán',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _PayOption(
+              title: 'Thẻ Tín dụng / Ghi nợ',
+              subtitle: 'Visa, Mastercard, JCB',
+              selected: _payment == 'Thẻ tín dụng / Ghi nợ',
+              onTap: () => setState(() => _payment = 'Thẻ tín dụng / Ghi nợ'),
+            ),
+            const SizedBox(height: 10),
+            _PayOption(
+              title: 'Ví điện tử',
+              subtitle: 'MoMo, ZaloPay, Apple Pay',
+              selected: _payment == 'Ví điện tử',
+              onTap: () => setState(() => _payment = 'Ví điện tử'),
+            ),
+            const SizedBox(height: 10),
+            _PayOption(
+              title: 'Thanh toán tại khách sạn',
+              subtitle: 'Không cần thẻ tín dụng',
+              selected: _payment == 'Thanh toán tại khách sạn',
+              onTap: () => setState(() => _payment = 'Thanh toán tại khách sạn'),
+            ),
+
+            const SizedBox(height: 18),
+            Text(
+              'Chi tiết giá',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 10),
+            AppCard(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  _PriceRow(
+                    left: '${money.format(widget.room.price)} x $_soDem đêm',
+                    right: '${money.format(_tongTien)}đ',
+                  ),
+                  const SizedBox(height: 10),
+                  Divider(color: cs.outlineVariant.withValues(alpha: 0.35)),
+                  const SizedBox(height: 10),
+                  _PriceRow(
+                    left: 'Tổng cộng',
+                    right: '${money.format(_tongTien)}đ',
+                    bold: true,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 90),
           ],
         ),
       ),
     );
   }
 
-  Widget _chonNgayNhanTra(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Expanded(
-          child: _chipNgay(
-            context: context,
-            nhan: 'Nhận phòng',
-            ngay: _ngayNhanPhong,
-            onTap: () => _chonNgay(context, laNhanPhong: true),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: Icon(Icons.arrow_forward, color: cs.onSurface.withValues(alpha: 0.6)),
-        ),
-        Expanded(
-          child: _chipNgay(
-            context: context,
-            nhan: 'Trả phòng',
-            ngay: _ngayTraPhong,
-            onTap: () => _chonNgay(context, laNhanPhong: false),
-          ),
-        ),
-      ],
+  Widget _thumbFallback(ColorScheme cs) {
+    return Container(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+      alignment: Alignment.center,
+      child: Icon(Icons.image, color: cs.onSurfaceVariant, size: 30),
     );
   }
+}
 
-  Widget _chipNgay({
-    required BuildContext context,
-    required String nhan,
-    required DateTime? ngay,
-    required VoidCallback onTap,
-  }) {
+class _DateBox extends StatelessWidget {
+  const _DateBox({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final f = DateFormat('dd/MM/yyyy');
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cs.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              nhan,
-              style: TextStyle(color: cs.onSurface.withValues(alpha: 0.65), fontSize: 12.5),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              ngay == null ? 'Chọn ngày' : DateFormat('dd/MM/yyyy').format(ngay),
+              label,
               style: TextStyle(
-                fontSize: 15.5,
-                fontWeight: FontWeight.w800,
+                color: cs.onSurface.withValues(alpha: 0.65),
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value == null ? 'Chọn ngày' : f.format(value!),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
                 color: cs.onSurface,
               ),
             ),
@@ -440,66 +429,118 @@ class _BookingScreenState extends State<BookingScreen> {
       ),
     );
   }
+}
 
-  Widget _tongKetGia(ThemeData theme) {
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final tienTe = NumberFormat('#,###', 'vi_VN');
+class _PayOption extends StatelessWidget {
+  const _PayOption({
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
 
-    return Container(
-      padding: const EdgeInsets.all(20).copyWith(top: 18),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-        border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6))),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Tổng ($_soDem đêm)',
-                style: TextStyle(fontSize: 16, color: cs.onSurface.withValues(alpha: 0.7)),
-              ),
-              Text(
-                '${tienTe.format(_tongTien)} VNĐ',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: cs.onSurface,
-                ),
-              ),
-            ],
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? cs.primary.withValues(alpha: 0.75)
+                : cs.outlineVariant.withValues(alpha: 0.55),
+            width: selected ? 1.6 : 1,
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: Consumer<BookingProvider>(
-              builder: (context, bookingProvider, _) {
-                return ElevatedButton.icon(
-                  onPressed: bookingProvider.isLoading || _soDem <= 0 ? null : _datPhong,
-                  icon: bookingProvider.isLoading
-                      ? SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: cs.onPrimary,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.payment_outlined, color: cs.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: cs.onSurface,
+                      )),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w600,
                     ),
-                  )
-                      : const Icon(Icons.check_circle_outline),
-                  label: Text(bookingProvider.isLoading ? 'Đang xử lý…' : 'Xác nhận & đặt phòng'),
-                );
-              },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: selected ? cs.primary : cs.outlineVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PriceRow extends StatelessWidget {
+  const _PriceRow({
+    required this.left,
+    required this.right,
+    this.bold = false,
+  });
+
+  final String left;
+  final String right;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            left,
+            style: TextStyle(
+              color: cs.onSurface.withValues(alpha: bold ? 0.9 : 0.7),
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
             ),
           ),
-        ],
-      ),
+        ),
+        Text(
+          right,
+          style: TextStyle(
+            color: cs.onSurface,
+            fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+            fontSize: bold ? 18 : 14.5,
+          ),
+        ),
+      ],
     );
   }
 }

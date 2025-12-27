@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:booking_app/models/review_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -29,6 +30,77 @@ class HotelProvider extends ChangeNotifier {
   List<ReviewModel> get reviews => _reviews;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  // ============================================================
+  // HOTEL NAME CACHE (để hiện Tên KS thay vì hotelId)
+  // ============================================================
+  final Map<String, String> _hotelNameCache = <String, String>{};
+
+  String? getHotelNameCached(String hotelId) => _hotelNameCache[hotelId];
+
+  Future<void> preloadHotelNames(Iterable<String> hotelIds) async {
+    final missing = hotelIds
+        .where((id) => id.trim().isNotEmpty && !_hotelNameCache.containsKey(id))
+        .toSet();
+
+    if (missing.isEmpty) return;
+
+    final fs = FirebaseFirestore.instance;
+    final ids = missing.toList();
+
+    // whereIn tối đa 10 phần tử / lần
+    for (var i = 0; i < ids.length; i += 10) {
+      final part = ids.sublist(i, min(i + 10, ids.length));
+
+      // ✅ Trường hợp hotelId chính là documentId của collection 'hotels'
+      final snapByDocId = await fs
+          .collection('hotels')
+          .where(FieldPath.documentId, whereIn: part)
+          .get();
+
+      for (final doc in snapByDocId.docs) {
+        final data = doc.data();
+        final name = (data['name'] ??
+            data['hotelName'] ??
+            data['tenKhachSan'] ??
+            '')
+            .toString()
+            .trim();
+
+        if (name.isNotEmpty) {
+          _hotelNameCache[doc.id] = name;
+        }
+      }
+
+      // ✅ Fallback: nếu hotelId là field 'hotelId' trong doc hotels
+      final notFound =
+      part.where((id) => !_hotelNameCache.containsKey(id)).toList();
+
+      if (notFound.isNotEmpty) {
+        final snapByField = await fs
+            .collection('hotels')
+            .where('hotelId', whereIn: notFound)
+            .get();
+
+        for (final doc in snapByField.docs) {
+          final data = doc.data();
+          final idVal = (data['hotelId'] ?? '').toString().trim();
+          final name = (data['name'] ??
+              data['hotelName'] ??
+              data['tenKhachSan'] ??
+              '')
+              .toString()
+              .trim();
+
+          if (idVal.isNotEmpty && name.isNotEmpty) {
+            _hotelNameCache[idVal] = name;
+          }
+        }
+      }
+    }
+
+    notifyListeners();
+  }
 
   @override
   void dispose() {
@@ -385,6 +457,10 @@ class HotelProvider extends ChangeNotifier {
         _rooms
           ..clear()
           ..addAll(rooms);
+
+        // ✅ NEW: preload tên khách sạn để UI hiển thị "Tên khách sạn"
+        // (không await vì đang ở stream listener)
+        preloadHotelNames(rooms.map((e) => e.hotelId));
 
         if (_isLoading) _isLoading = false;
         notifyListeners();

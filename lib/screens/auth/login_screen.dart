@@ -1,4 +1,4 @@
-import 'dart:ui';
+// ✅ cần khi dùng ImageFilter/BackdropFilter
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -9,7 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 
 import '../../providers/auth_providers.dart';
-import '../../providers/theme_provider.dart'; // ✅ theme theo vai trò
+import '../../providers/theme_provider.dart'; // giữ để set role null
 import '../home_screen.dart';
 import 'register_screen.dart';
 
@@ -29,6 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool anMatKhau = true;
   bool dangXuLy = false;
 
+  static const _primaryBlue = Color(0xFF2563EB);
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +46,17 @@ class _LoginScreenState extends State<LoginScreen> {
     emailCtrl.dispose();
     matKhauCtrl.dispose();
     super.dispose();
+  }
+
+  // ✅ NEW: nút quay lại
+  void _quayLai() {
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+    } else {
+      // nếu Login là màn đầu (không pop được) thì về intro
+      nav.pushReplacementNamed('/intro');
+    }
   }
 
   Future<void> luuNguoiDungFirestore(fb_auth.User user) async {
@@ -73,7 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     final cs = Theme.of(context).colorScheme;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(noiDung),
@@ -85,7 +97,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> diSauDangNhap() async {
     if (!mounted) return;
-
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
     );
@@ -105,9 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final user = fb_auth.FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await luuNguoiDungFirestore(user);
-      }
+      if (user != null) await luuNguoiDungFirestore(user);
 
       await diSauDangNhap();
     } catch (e) {
@@ -119,7 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> dangNhapBangGoogle() async {
     if (dangXuLy) return;
-
     setState(() => dangXuLy = true);
 
     try {
@@ -142,14 +150,12 @@ class _LoginScreenState extends State<LoginScreen> {
           idToken: googleAuth.idToken,
         );
 
-        userCredential =
-        await fb_auth.FirebaseAuth.instance.signInWithCredential(credential);
+        userCredential = await fb_auth.FirebaseAuth.instance
+            .signInWithCredential(credential);
       }
 
       final user = userCredential.user;
-      if (user != null) {
-        await luuNguoiDungFirestore(user);
-      }
+      if (user != null) await luuNguoiDungFirestore(user);
 
       await diSauDangNhap();
     } catch (e) {
@@ -211,29 +217,112 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Widget nutGoc({
-    required IconData icon,
-    required VoidCallback? onTap,
-    required ColorScheme cs,
-    required bool isDark,
-    String? tooltip,
-  }) {
-    final enabled = onTap != null;
-    final iconColor =
-    enabled ? cs.onSurface : cs.onSurface.withValues(alpha: 0.45);
+  // ================= UI helpers =================
 
-    return Tooltip(
-      message: tooltip ?? '',
-      child: Material(
-        color: cs.surface.withValues(alpha: isDark ? 0.35 : 0.65),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Icon(icon, color: iconColor),
+  Widget _pillContainer({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+            color: Colors.black.withValues(alpha: 0.22),
           ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  InputDecoration _pillDeco(String hint, {Widget? suffixIcon}) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.45)),
+      border: InputBorder.none,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      suffixIcon: suffixIcon,
+    );
+  }
+
+  Widget _blueButton({
+    required String text,
+    required VoidCallback? onPressed,
+    required bool loading,
+  }) {
+    return SizedBox(
+      height: 58,
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _primaryBlue,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 0,
+        ),
+        child: loading
+            ? const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.6),
+        )
+            : Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Icon(Icons.arrow_forward_rounded, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _googleWhiteButton({
+    required VoidCallback? onPressed,
+    required bool loading,
+  }) {
+    return SizedBox(
+      height: 58,
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 0,
+        ),
+        child: loading
+            ? const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.6),
+        )
+            : Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.network(
+              'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg',
+              width: 18,
+              height: 18,
+              errorBuilder: (_, __, ___) =>
+              const Icon(Icons.g_mobiledata, size: 22),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Tiếp tục với Google',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ],
         ),
       ),
     );
@@ -241,354 +330,335 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
     final authProvider = context.watch<AuthProvider>();
     final voHieuHoa = dangXuLy || authProvider.isLoading;
 
-    final themeProvider = context.watch<ThemeProvider>();
-    final isDark = themeProvider.isDark(context);
-
+    final isDark = context.select<ThemeProvider, bool>((p) => p.isDark(context));
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    final lopPhu = isDark
-        ? cs.scrim.withValues(alpha: 0.65)
-        : cs.scrim.withValues(alpha: 0.35);
-
-    final nenThe = isDark
-        ? cs.surface.withValues(alpha: 0.20)
-        : cs.surface.withValues(alpha: 0.78);
-
-    final vienThe = isDark
-        ? cs.outlineVariant.withValues(alpha: 0.30)
-        : cs.outlineVariant.withValues(alpha: 0.50);
-
-    final mauChuChinh = cs.onSurface;
-    final mauChuPhu = cs.onSurface.withValues(alpha: 0.75);
-
-    InputDecoration inputDeco(String goiY) {
-      return InputDecoration(
-        hintText: goiY,
-        filled: true,
-        fillColor: isDark
-            ? cs.surface.withValues(alpha: 0.18)
-            : cs.surface.withValues(alpha: 0.92),
-        hintStyle: TextStyle(color: mauChuPhu),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: vienThe),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: vienThe),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: cs.secondary, width: 1.6),
-        ),
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      );
-    }
+    // overlay giống hình: trên nhẹ, dưới đậm
+    final overlayTop = Colors.black.withValues(alpha: isDark ? 0.10 : 0.08);
+    final overlayMid = Colors.black.withValues(alpha: isDark ? 0.45 : 0.40);
+    final overlayBot = Colors.black.withValues(alpha: isDark ? 0.85 : 0.80);
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image:
-                  NetworkImage('https://picsum.photos/seed/hotel/1920/1080'),
-                  fit: BoxFit.cover,
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Stack(
+          children: [
+            // ✅ NỀN: dùng ảnh asset của bạn
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage('assets/images/bg_hotel.png'),
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // ✅ FIX 1: overlay không ăn touch
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: lopPhu),
+            // ✅ overlay gradient
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [overlayTop, overlayMid, overlayBot],
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
 
-          // CONTENT (form) - nằm dưới
-          SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final maxCardWidth =
-                constraints.maxWidth >= 520 ? 420.0 : double.infinity;
-
-                return Center(
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomInset),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: maxCardWidth),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: nenThe,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: vienThe),
-                              boxShadow: [
-                                BoxShadow(
-                                  blurRadius: 24,
-                                  color: cs.shadow.withValues(
-                                      alpha: isDark ? 0.25 : 0.12),
-                                ),
-                              ],
-                            ),
+            SafeArea(
+              child: Stack(
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: EdgeInsets.fromLTRB(22, 14, 22, 14 + bottomInset),
+                        child: ConstrainedBox(
+                          constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                          child: IntrinsicHeight(
                             child: Form(
                               key: formKey,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Text(
-                                    'Chào mừng quay lại',
-                                    style: theme.textTheme.headlineMedium
-                                        ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: mauChuChinh,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Đăng nhập để tiếp tục',
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(color: mauChuPhu),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 24),
-                                  TextFormField(
-                                    controller: emailCtrl,
-                                    keyboardType: TextInputType.emailAddress,
-                                    textInputAction: TextInputAction.next,
-                                    style: TextStyle(color: mauChuChinh),
-                                    decoration: inputDeco('Email'),
-                                    validator: (value) {
-                                      final v = (value ?? '').trim();
-                                      if (v.isEmpty) return 'Vui lòng nhập email';
-                                      if (!v.contains('@')) {
-                                        return 'Email không hợp lệ';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 14),
-                                  TextFormField(
-                                    controller: matKhauCtrl,
-                                    obscureText: anMatKhau,
-                                    textInputAction: TextInputAction.done,
-                                    onFieldSubmitted: (_) {
-                                      if (!voHieuHoa) dangNhapBangEmail();
-                                    },
-                                    style: TextStyle(color: mauChuChinh),
-                                    decoration: inputDeco('Mật khẩu').copyWith(
-                                      suffixIcon: IconButton(
-                                        icon: Icon(
-                                          anMatKhau
-                                              ? Icons.visibility_off_outlined
-                                              : Icons.visibility_outlined,
-                                          color: mauChuPhu,
-                                        ),
-                                        onPressed: () {
-                                          setState(
-                                                  () => anMatKhau = !anMatKhau);
-                                        },
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      final v = value ?? '';
-                                      if (v.isEmpty) {
-                                        return 'Vui lòng nhập mật khẩu';
-                                      }
-                                      if (v.length < 6) {
-                                        return 'Mật khẩu tối thiểu 6 ký tự';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: TextButton(
-                                      onPressed:
-                                      voHieuHoa ? null : quenMatKhau,
-                                      child: Text(
-                                        'Quên mật khẩu?',
-                                        style: TextStyle(color: mauChuPhu),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  ElevatedButton(
-                                    onPressed:
-                                    voHieuHoa ? null : dangNhapBangEmail,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: cs.secondary,
-                                      foregroundColor: cs.onSecondary,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                    ),
-                                    child: voHieuHoa
-                                        ? SizedBox(
-                                      height: 22,
-                                      width: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.6,
-                                        color: cs.onSecondary,
-                                      ),
-                                    )
-                                        : const Text('Đăng nhập'),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Row(
+                                  const SizedBox(height: 18),
+
+                                  // ===== Header logo + title =====
+                                  Column(
                                     children: [
-                                      Expanded(child: Divider(color: vienThe)),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10),
-                                        child: Text(
-                                          'HOẶC',
-                                          style: TextStyle(color: mauChuPhu),
+                                      Container(
+                                        width: 76,
+                                        height: 76,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.16),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white.withValues(alpha: 0.22),
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              blurRadius: 18,
+                                              color: Colors.black.withValues(alpha: 0.22),
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.flight_takeoff_rounded,
+                                          size: 34,
+                                          color: Colors.white,
                                         ),
                                       ),
-                                      Expanded(child: Divider(color: vienThe)),
+                                      const SizedBox(height: 14),
+                                      const Text(
+                                        'Booking-P2TK',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 32,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                          letterSpacing: 0.3,
+                                          shadows: [
+                                            Shadow(
+                                              blurRadius: 16,
+                                              color: Colors.black38,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Đặt phòng mọi lúc, mọi nơi',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.white.withValues(alpha: 0.70),
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                  const SizedBox(height: 14),
-                                  OutlinedButton(
-                                    onPressed: voHieuHoa
-                                        ? null
-                                        : dangNhapBangGoogle,
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: mauChuChinh,
-                                      side: BorderSide(color: vienThe),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                      MainAxisAlignment.center,
-                                      children: [
-                                        Image.network(
-                                          'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg',
-                                          width: 18,
-                                          height: 18,
-                                          errorBuilder: (c, e, s) {
-                                            return Icon(
-                                              Icons.g_mobiledata,
-                                              size: 22,
-                                              color: mauChuChinh,
-                                            );
-                                          },
-                                        ),
-                                        const SizedBox(width: 10),
-                                        const Text('Tiếp tục với Google'),
+
+                                  const Spacer(),
+
+                                  // ===== Welcome =====
+                                  const Text(
+                                    'Chào mừng bạn trở lại',
+                                    style: TextStyle(
+                                      fontSize: 30,
+                                      height: 1.05,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(blurRadius: 16, color: Colors.black38),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 18),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Vui lòng đăng nhập để tiếp tục',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.white.withValues(alpha: 0.72),
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // ===== Email =====
+                                  _pillContainer(
+                                    child: TextFormField(
+                                      controller: emailCtrl,
+                                      keyboardType: TextInputType.emailAddress,
+                                      textInputAction: TextInputAction.next,
+                                      style: const TextStyle(
+                                        color: Colors.black87,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      decoration: _pillDeco('Email hoặc tên đăng nhập'),
+                                      validator: (value) {
+                                        final v = (value ?? '').trim();
+                                        if (v.isEmpty) return 'Vui lòng nhập email';
+                                        // NOTE: nếu bạn thật sự cho login bằng username,
+                                        // hãy bỏ check '@' hoặc viết logic map username -> email.
+                                        if (!v.contains('@')) return 'Email không hợp lệ';
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // ===== Password =====
+                                  _pillContainer(
+                                    child: TextFormField(
+                                      controller: matKhauCtrl,
+                                      obscureText: anMatKhau,
+                                      textInputAction: TextInputAction.done,
+                                      onFieldSubmitted: (_) {
+                                        if (!voHieuHoa) dangNhapBangEmail();
+                                      },
+                                      style: const TextStyle(
+                                        color: Colors.black87,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      decoration: _pillDeco(
+                                        'Mật khẩu',
+                                        suffixIcon: IconButton(
+                                          onPressed: () =>
+                                              setState(() => anMatKhau = !anMatKhau),
+                                          icon: Icon(
+                                            anMatKhau
+                                                ? Icons.visibility_off_outlined
+                                                : Icons.visibility_outlined,
+                                            color: Colors.black.withValues(alpha: 0.45),
+                                          ),
+                                        ),
+                                      ),
+                                      validator: (value) {
+                                        final v = value ?? '';
+                                        if (v.isEmpty) return 'Vui lòng nhập mật khẩu';
+                                        if (v.length < 6) {
+                                          return 'Mật khẩu tối thiểu 6 ký tự';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 8),
+
+                                  // ===== Forgot =====
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: voHieuHoa ? null : quenMatKhau,
+                                      child: Text(
+                                        'Quên mật khẩu?',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.white.withValues(alpha: 0.78),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  // ===== Login =====
+                                  _blueButton(
+                                    text: 'Đăng nhập',
+                                    onPressed: voHieuHoa ? null : dangNhapBangEmail,
+                                    loading: voHieuHoa,
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  // ===== Or =====
+                                  Center(
+                                    child: Text(
+                                      'Hoặc',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.65),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  // ===== Google =====
+                                  _googleWhiteButton(
+                                    onPressed: voHieuHoa ? null : dangNhapBangGoogle,
+                                    loading: false, // loading chung là voHieuHoa
+                                  ),
+
+                                  const SizedBox(height: 14),
+
+                                  // ===== Register row =====
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
                                         'Chưa có tài khoản? ',
-                                        style: TextStyle(color: mauChuPhu),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.white.withValues(alpha: 0.72),
+                                        ),
                                       ),
                                       TextButton(
                                         onPressed: () {
                                           Navigator.of(context).push(
                                             MaterialPageRoute(
-                                              builder: (_) =>
-                                              const RegisterScreen(),
+                                              builder: (_) => const RegisterScreen(),
                                             ),
                                           );
                                         },
-                                        child: Text(
+                                        child: const Text(
                                           'Đăng ký',
                                           style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: cs.secondary,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w900,
+                                            color: _primaryBlue,
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
+
+                                  const SizedBox(height: 10),
                                 ],
                               ),
                             ),
                           ),
                         ),
+                      );
+                    },
+                  ),
+
+                  // ✅ NÚT QUAY LẠI (góc trái)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Material(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _quayLai,
+                        child: Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.arrow_back_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-
-          // ✅ FIX 2: Đặt 2 nút góc LÊN TRÊN CÙNG (stack child cuối) + Positioned
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    nutGoc(
-                      icon: Icons.arrow_back,
-                      onTap: voHieuHoa
-                          ? null
-                          : () {
-                        if (Navigator.of(context).canPop()) {
-                          Navigator.of(context).pop();
-                        } else {
-                          Navigator.of(context)
-                              .pushReplacementNamed('/intro');
-                        }
-                      },
-                      cs: cs,
-                      isDark: isDark,
-                      tooltip: 'Quay lại',
-                    ),
-                    nutGoc(
-                      icon: isDark
-                          ? Icons.light_mode_outlined
-                          : Icons.dark_mode_outlined,
-                      onTap:
-                      voHieuHoa ? null : () => themeProvider.toggle(context),
-                      cs: cs,
-                      isDark: isDark,
-                      tooltip: isDark ? 'Chế độ sáng' : 'Chế độ tối',
-                    ),
-                  ],
-                ),
+                ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

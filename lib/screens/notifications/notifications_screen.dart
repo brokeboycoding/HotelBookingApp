@@ -6,7 +6,7 @@ import '../../providers/auth_providers.dart';
 import '../../providers/notification_provider.dart';
 import '../../models/user_model.dart';
 import '../../models/notification_model.dart';
-import 'widgets/notification_tile.dart';
+import '../../widgets/notification_tile.dart';
 
 class NotificationsScreen extends StatefulWidget {
   static const routeName = '/notifications';

@@ -1,9 +1,12 @@
 import 'package:booking_app/providers/auth_providers.dart';
+import 'package:booking_app/widgets/ui/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
+
+  static const routeName = '/edit-profile';
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -11,14 +14,12 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-
   late final TextEditingController _hoTenCtrl;
   late final TextEditingController _soDienThoaiCtrl;
 
   @override
   void initState() {
     super.initState();
-
     final user = context.read<AuthProvider>().currentUser;
     _hoTenCtrl = TextEditingController(text: (user?.name ?? '').trim());
     _soDienThoaiCtrl = TextEditingController(text: (user?.phone ?? '').trim());
@@ -33,13 +34,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   void _thongBao(String noiDung, {bool laLoi = false}) {
     final cs = Theme.of(context).colorScheme;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           noiDung,
           style: TextStyle(
             color: laLoi ? cs.onErrorContainer : cs.onTertiaryContainer,
+            fontWeight: FontWeight.w600,
           ),
         ),
         behavior: SnackBarBehavior.floating,
@@ -49,27 +50,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _luuThongTin() async {
-    FocusScope.of(context).unfocus(); // ✅ ẩn bàn phím
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
-    final authProvider = context.read<AuthProvider>();
-
+    final auth = context.read<AuthProvider>();
     try {
-      await authProvider.updateProfile(
+      await auth.updateProfile(
         name: _hoTenCtrl.text.trim(),
         phone: _soDienThoaiCtrl.text.trim(),
       );
 
       if (!mounted) return;
-
       _thongBao('Đã cập nhật hồ sơ thành công!');
       Navigator.of(context).pop();
     } catch (_) {
       if (!mounted) return;
-
       _thongBao(
-        authProvider.errorMessage ??
-            'Không thể cập nhật hồ sơ. Vui lòng thử lại.',
+        auth.errorMessage ?? 'Không thể cập nhật hồ sơ. Vui lòng thử lại.',
         laLoi: true,
       );
     }
@@ -79,87 +76,106 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chỉnh sửa hồ sơ'),
+      appBar: AppBar(title: const Text('Chỉnh sửa hồ sơ')),
+      bottomNavigationBar: Consumer<AuthProvider>(
+        builder: (context, p, _) => AppBottomPrimaryButton(
+          text: 'Lưu thay đổi',
+          isLoading: p.isLoading,
+          onPressed: p.isLoading ? null : _luuThongTin,
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(18),
         child: Form(
           key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Card(
-                color: cs.surface,
-                elevation: isDark ? 0 : 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: cs.outlineVariant
-                        .withValues(alpha: isDark ? 0.25 : 0.6),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      TextFormField(
-                        controller: _hoTenCtrl,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Họ và tên',
-                          hintText: 'Nhập họ và tên của bạn',
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Vui lòng nhập họ và tên';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _soDienThoaiCtrl,
-                        keyboardType: TextInputType.phone,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _luuThongTin(),
-                        decoration: const InputDecoration(
-                          labelText: 'Số điện thoại (không bắt buộc)',
-                          hintText: 'Ví dụ: 0901234567',
-                          prefixIcon: Icon(Icons.phone_outlined),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
 
-              Consumer<AuthProvider>(
-                builder: (context, authProvider, _) {
-                  return FilledButton.icon(
-                    onPressed: authProvider.isLoading ? null : _luuThongTin,
-                    icon: authProvider.isLoading
-                        ? SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: cs.onPrimary,
-                      ),
-                    )
-                        : const Icon(Icons.save_outlined),
-                    label: Text(
-                      authProvider.isLoading ? 'Đang lưu…' : 'Lưu thay đổi',
+              // Avatar (UI giống ảnh, chưa đổi chức năng upload avatar)
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 62,
+                    backgroundColor: cs.primary.withValues(alpha: 0.12),
+                    child: CircleAvatar(
+                      radius: 58,
+                      backgroundColor: cs.surface,
+                      child: Icon(Icons.person, size: 62, color: cs.onSurfaceVariant),
                     ),
-                  );
-                },
+                  ),
+                  Positioned(
+                    right: 2,
+                    bottom: 2,
+                    child: InkWell(
+                      onTap: () => _thongBao('Chức năng đổi ảnh đại diện: bạn có thể thêm sau.'),
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: cs.surface, width: 3),
+                        ),
+                        child: Icon(Icons.photo_camera, color: cs.onPrimary),
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 10),
+              Text(
+                'Đổi ảnh đại diện',
+                style: TextStyle(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                ),
+              ),
+
+              const SizedBox(height: 18),
+              AppCard(
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _hoTenCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Họ và tên',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      validator: (v) {
+                        if ((v ?? '').trim().isEmpty) return 'Vui lòng nhập họ và tên';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _soDienThoaiCtrl,
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _luuThongTin(),
+                      decoration: const InputDecoration(
+                        labelText: 'Số điện thoại (Tùy chọn)',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 14),
+              Text(
+                'Thông tin liên hệ này sẽ được sử dụng để tự động điền vào các đơn đặt phòng của bạn.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 90),
             ],
           ),
         ),

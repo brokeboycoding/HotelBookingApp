@@ -15,8 +15,14 @@ class _ApproveRoomsScreenState extends State<ApproveRoomsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<HotelProvider>().loadPendingRooms();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final p = context.read<HotelProvider>();
+
+      // load phòng chờ duyệt
+      await p.loadPendingRooms();
+
+      // preload tên KS để hiển thị
+      await p.preloadHotelNames(p.rooms.map((e) => e.hotelId));
     });
   }
 
@@ -79,7 +85,7 @@ class _ApproveRoomsScreenState extends State<ApproveRoomsScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     final themeProvider = context.watch<ThemeProvider>();
-    final dangToi = themeProvider.isDark(context); // ✅ đúng
+    final dangToi = themeProvider.isDark(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -87,10 +93,8 @@ class _ApproveRoomsScreenState extends State<ApproveRoomsScreen> {
         actions: [
           IconButton(
             tooltip: dangToi ? 'Chuyển sang sáng' : 'Chuyển sang tối',
-            icon: Icon(
-              dangToi ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-            ),
-            onPressed: () => context.read<ThemeProvider>().toggle(context), // ✅ cần context
+            icon: Icon(dangToi ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+            onPressed: () => context.read<ThemeProvider>().toggle(context),
           ),
         ],
       ),
@@ -117,6 +121,9 @@ class _ApproveRoomsScreenState extends State<ApproveRoomsScreen> {
             itemBuilder: (ctx, i) {
               final phong = danhSachPhongChoDuyet[i];
 
+              // ✅ Lấy tên khách sạn từ cache (nếu chưa có thì fallback về hotelId)
+              final tenKS = hotelProvider.getHotelNameCached(phong.hotelId) ?? phong.hotelId;
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
                 elevation: isDark ? 0 : 2,
@@ -124,9 +131,7 @@ class _ApproveRoomsScreenState extends State<ApproveRoomsScreen> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
-                    color: cs.outlineVariant.withValues(
-                      alpha: isDark ? 0.25 : 0.6,
-                    ),
+                    color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
                   ),
                 ),
                 child: ListTile(
@@ -140,13 +145,10 @@ class _ApproveRoomsScreenState extends State<ApproveRoomsScreen> {
                   ),
                   title: Text(
                     phong.type,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: cs.onSurface,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface),
                   ),
                   subtitle: Text(
-                    'Mã khách sạn: ${phong.hotelId}\n'
+                    'Tên khách sạn: $tenKS\n'
                         'Giá: ${phong.price.toStringAsFixed(0)} VNĐ',
                     style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
                   ),

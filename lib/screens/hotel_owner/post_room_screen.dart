@@ -33,12 +33,12 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
 
   final TextEditingController _amenityCtrl = TextEditingController();
 
-  // ✅ bytes images
   final List<CloudinaryBytesFile> _newImages = <CloudinaryBytesFile>[];
   final List<String> _imageUrls = <String>[];
   final Set<String> _amenities = <String>{};
 
   bool _submitting = false;
+  int _maxGuests = 1;
 
   static const List<String> _presetAmenities = <String>[
     'Wifi',
@@ -65,9 +65,8 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     _priceCtrl = TextEditingController(
       text: r == null ? '' : (r.price == 0 ? '' : r.price.toStringAsFixed(0)),
     );
-    _maxGuestsCtrl = TextEditingController(
-      text: r == null ? '1' : r.maxGuests.toString(),
-    );
+    _maxGuests = r == null ? 1 : r.maxGuests;
+    _maxGuestsCtrl = TextEditingController(text: _maxGuests.toString());
     _descCtrl = TextEditingController(text: r?.description ?? '');
 
     if (r != null) {
@@ -85,6 +84,26 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     _descCtrl.dispose();
     _amenityCtrl.dispose();
     super.dispose();
+  }
+
+  InputDecoration _dec(String label, IconData icon, {String? hint}) {
+    final cs = Theme.of(context).colorScheme;
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: cs.primary, width: 1.6),
+      ),
+    );
   }
 
   String _basename(String path) {
@@ -156,7 +175,6 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     return int.tryParse(s.trim()) ?? fallback;
   }
 
-  // ✅ Upload ảnh mới bằng Cloudinary bytes
   Future<List<String>> _uploadNewImages() async {
     if (_newImages.isEmpty) return [];
 
@@ -167,6 +185,14 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     );
 
     return urls;
+  }
+
+  void _stepGuests(int delta) {
+    final next = (_maxGuests + delta).clamp(1, 20);
+    setState(() {
+      _maxGuests = next;
+      _maxGuestsCtrl.text = _maxGuests.toString();
+    });
   }
 
   Future<void> _submit() async {
@@ -181,11 +207,10 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     try {
       final provider = context.read<HotelProvider>();
 
-      // upload ảnh mới -> lấy url
       final uploadedUrls = await _uploadNewImages();
       final finalImageUrls = <String>[
-        ..._imageUrls,     // ảnh cũ còn giữ
-        ...uploadedUrls,   // ảnh mới upload
+        ..._imageUrls,
+        ...uploadedUrls,
       ];
 
       final roomNumber = _roomNumberCtrl.text.trim();
@@ -219,7 +244,6 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
         );
       }
 
-      // ✅ clear ảnh local sau khi upload/lưu xong
       _newImages.clear();
 
       if (!mounted) return;
@@ -252,15 +276,38 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
+      backgroundColor: cs.surfaceContainerLowest,
       appBar: AppBar(
         title: Text(_isEdit ? 'Chỉnh sửa phòng' : 'Đăng phòng mới'),
+        centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: SizedBox(
+            height: 52,
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _submitting ? null : _submit,
+              icon: _submitting
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+                  : const Icon(Icons.save_rounded),
+              label: Text(_submitting
+                  ? 'Đang lưu...'
+                  : (_isEdit ? 'Cập nhật phòng' : 'Lưu thông tin phòng')),
+            ),
+          ),
+        ),
+      ),
+      body: SafeArea(
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
             children: [
               Text(
                 widget.hotelName?.trim().isNotEmpty == true
@@ -270,235 +317,267 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
               ),
               const SizedBox(height: 12),
 
-              TextFormField(
-                controller: _roomNumberCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Số phòng / Mã phòng',
-                  prefixIcon: Icon(Icons.meeting_room_outlined),
-                ),
-                validator: (v) =>
-                (v ?? '').trim().isEmpty ? 'Nhập số phòng' : null,
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _typeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Loại phòng (Standard/Deluxe/Suite...)',
-                  prefixIcon: Icon(Icons.category_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _priceCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Giá / đêm (VND)',
-                  prefixIcon: Icon(Icons.payments_outlined),
-                ),
-                validator: (v) {
-                  final p = _parsePrice(v ?? '');
-                  if (p <= 0) return 'Giá phải > 0';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _maxGuestsCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Số khách tối đa',
-                  prefixIcon: Icon(Icons.people_outline),
-                ),
-                validator: (v) {
-                  final n = _parseInt(v ?? '', fallback: 0);
-                  if (n <= 0) return 'Phải >= 1';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _descCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Mô tả',
-                  prefixIcon: Icon(Icons.description_outlined),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ===== Images =====
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Ảnh phòng',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  TextButton.icon(
-                    onPressed: _submitting ? null : _pickImages,
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: const Text('Chọn ảnh'),
+              // ===== Ảnh phòng =====
+              _SectionCard(
+                title: 'Ảnh phòng',
+                trailing: Text(
+                  'Tối đa 10 ảnh',
+                  style: TextStyle(
+                    color: cs.onSurface.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // ảnh đã có (khi sửa)
-              if (_imageUrls.isNotEmpty)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: List.generate(_imageUrls.length, (i) {
-                    final url = _imageUrls[i];
-                    return Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            url,
-                            width: 110,
-                            height: 80,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 110,
-                              height: 80,
-                              alignment: Alignment.center,
-                              child: const Icon(Icons.broken_image_outlined),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 4,
-                          top: 4,
-                          child: InkWell(
-                            onTap: _submitting ? null : () => _removeUrlImage(i),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: const Icon(Icons.close,
-                                  size: 16, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
                 ),
-
-              // ảnh mới chọn (bytes)
-              if (_newImages.isNotEmpty) ...[
-                if (_imageUrls.isNotEmpty) const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: List.generate(_newImages.length, (i) {
-                    return Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.memory(
-                            _newImages[i].bytes,
-                            width: 110,
-                            height: 80,
-                            fit: BoxFit.cover,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: 92,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _AddImageTile(
+                            onTap: _submitting ? null : _pickImages,
                           ),
-                        ),
-                        Positioned(
-                          right: 4,
-                          top: 4,
-                          child: InkWell(
-                            onTap: _submitting ? null : () => _removeNewImage(i),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                borderRadius: BorderRadius.circular(999),
+                          const SizedBox(width: 10),
+
+                          // ảnh url (khi sửa)
+                          ...List.generate(_imageUrls.length, (i) {
+                            final url = _imageUrls[i];
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: _ThumbTileUrl(
+                                url: url,
+                                onRemove: _submitting ? null : () => _removeUrlImage(i),
                               ),
-                              child: const Icon(Icons.close,
-                                  size: 16, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
-                ),
-              ],
+                            );
+                          }),
 
-              const SizedBox(height: 16),
-
-              // ===== Amenities =====
-              Text('Tiện nghi', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _presetAmenities.map((a) {
-                  final selected = _amenities.contains(a);
-                  return FilterChip(
-                    label: Text(a),
-                    selected: selected,
-                    onSelected: _submitting ? null : (_) => _toggleAmenity(a),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _amenityCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Thêm tiện nghi khác (tuỳ chọn)',
+                          // ảnh bytes mới
+                          ...List.generate(_newImages.length, (i) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: _ThumbTileBytes(
+                                bytes: _newImages[i].bytes,
+                                onRemove: _submitting ? null : () => _removeNewImage(i),
+                              ),
+                            );
+                          }),
+                        ],
                       ),
-                      onSubmitted: (_) => _addCustomAmenity(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _submitting ? null : _addCustomAmenity,
-                    child: const Text('Thêm'),
-                  ),
-                ],
-              ),
-
-              if (_amenities.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _amenities.map((a) {
-                    return Chip(
-                      label: Text(a),
-                      onDeleted: _submitting ? null : () => _toggleAmenity(a),
-                    );
-                  }).toList(),
+                    const SizedBox(height: 10),
+                    Text(
+                      (_imageUrls.length + _newImages.length) == 0
+                          ? 'Hãy thêm ảnh để phòng trông hấp dẫn hơn.'
+                          : 'Đã chọn ${_imageUrls.length + _newImages.length} ảnh.',
+                      style: TextStyle(color: cs.onSurface.withValues(alpha: 0.7)),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              const SizedBox(height: 14),
 
-              const SizedBox(height: 24),
+              // ===== Thông tin cơ bản =====
+              _SectionCard(
+                title: 'Thông tin cơ bản',
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _roomNumberCtrl,
+                            decoration: _dec(
+                              'Số phòng',
+                              Icons.meeting_room_outlined,
+                              hint: 'VD: 101',
+                            ),
+                            validator: (v) =>
+                            (v ?? '').trim().isEmpty ? 'Nhập số phòng' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _typeCtrl,
+                            decoration: _dec(
+                              'Loại phòng',
+                              Icons.category_outlined,
+                              hint: 'Standard / Deluxe…',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _priceCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: _dec(
+                              'Giá / đêm (VND)',
+                              Icons.payments_outlined,
+                              hint: '500000',
+                            ),
+                            validator: (v) {
+                              final p = _parsePrice(v ?? '');
+                              if (p <= 0) return 'Giá phải > 0';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Số khách tối đa',
+                                style: TextStyle(
+                                  color: cs.onSurface.withValues(alpha: 0.75),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: cs.outlineVariant.withValues(alpha: 0.55),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    IconButton(
+                                      onPressed: _submitting ? null : () => _stepGuests(-1),
+                                      icon: const Icon(Icons.remove_rounded),
+                                    ),
+                                    Expanded(
+                                      child: Center(
+                                        child: Text(
+                                          _maxGuests.toString(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: _submitting ? null : () => _stepGuests(1),
+                                      icon: const Icon(Icons.add_rounded),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // giữ controller để submit/validate như cũ
+                              SizedBox(
+                                height: 0,
+                                child: TextFormField(
+                                  controller: _maxGuestsCtrl,
+                                  validator: (v) {
+                                    final n = _parseInt(v ?? '', fallback: 0);
+                                    if (n <= 0) return 'Phải >= 1';
+                                    return null;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _descCtrl,
+                      maxLines: 4,
+                      decoration: _dec(
+                        'Mô tả chi tiết',
+                        Icons.description_outlined,
+                        hint: 'Mô tả về không gian, view, và các điểm nổi bật…',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _submitting ? null : _submit,
-                  icon: _submitting
-                      ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                      : const Icon(Icons.save),
-                  label: Text(_submitting
-                      ? 'Đang lưu...'
-                      : (_isEdit ? 'Cập nhật phòng' : 'Tạo phòng')),
+              // ===== Tiện nghi =====
+              _SectionCard(
+                title: 'Tiện nghi phòng',
+                trailing: TextButton(
+                  onPressed: _submitting
+                      ? null
+                      : () => setState(() {
+                    if (_amenities.length == _presetAmenities.length) {
+                      _amenities.clear();
+                    } else {
+                      _amenities.addAll(_presetAmenities);
+                    }
+                  }),
+                  child: Text(
+                    _amenities.length == _presetAmenities.length
+                        ? 'Bỏ chọn'
+                        : 'Chọn tất cả',
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _presetAmenities.map((a) {
+                        final selected = _amenities.contains(a);
+                        return FilterChip(
+                          label: Text(a),
+                          selected: selected,
+                          onSelected: _submitting ? null : (_) => _toggleAmenity(a),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _amenityCtrl,
+                            decoration: _dec(
+                              'Thêm tiện nghi khác',
+                              Icons.add_circle_outline_rounded,
+                              hint: 'Ví dụ: Dịch vụ giặt ủi',
+                            ),
+                            onSubmitted: (_) => _addCustomAmenity(),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 52,
+                          child: FilledButton(
+                            onPressed: _submitting ? null : _addCustomAmenity,
+                            child: const Text('Thêm'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_amenities.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _amenities.map((a) {
+                          return Chip(
+                            label: Text(a),
+                            onDeleted: _submitting ? null : () => _toggleAmenity(a),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -506,5 +585,245 @@ class _PostRoomScreenState extends State<PostRoomScreen> {
         ),
       ),
     );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+
+  const _SectionCard({
+    required this.title,
+    required this.child,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+
+    return Card(
+      elevation: 0,
+      color: cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                if (trailing != null) trailing!,
+              ],
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddImageTile extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const _AddImageTile({this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: _DashedRRect(
+        radius: 16,
+        color: cs.outlineVariant.withValues(alpha: 0.7),
+        child: SizedBox(
+          width: 110,
+          height: 80,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_a_photo_rounded, color: cs.primary),
+                const SizedBox(height: 6),
+                Text(
+                  'Thêm ảnh',
+                  style: TextStyle(
+                    color: cs.onSurface.withValues(alpha: 0.75),
+                    fontWeight: FontWeight.w600,
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThumbTileUrl extends StatelessWidget {
+  final String url;
+  final VoidCallback? onRemove;
+
+  const _ThumbTileUrl({required this.url, this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.network(
+            url,
+            width: 110,
+            height: 80,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              width: 110,
+              height: 80,
+              alignment: Alignment.center,
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 6,
+          top: 6,
+          child: InkWell(
+            onTap: onRemove,
+            borderRadius: BorderRadius.circular(99),
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ThumbTileBytes extends StatelessWidget {
+  final dynamic bytes;
+  final VoidCallback? onRemove;
+
+  const _ThumbTileBytes({required this.bytes, this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.memory(
+            bytes,
+            width: 110,
+            height: 80,
+            fit: BoxFit.cover,
+          ),
+        ),
+        Positioned(
+          right: 6,
+          top: 6,
+          child: InkWell(
+            onTap: onRemove,
+            borderRadius: BorderRadius.circular(99),
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashedRRect extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  final Color color;
+
+  const _DashedRRect({
+    required this.child,
+    required this.radius,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DashedRRectPainter(radius: radius, color: color),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DashedRRectPainter extends CustomPainter {
+  final double radius;
+  final Color color;
+
+  _DashedRRectPainter({required this.radius, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = color;
+
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+
+    final path = Path()..addRRect(rrect);
+
+    const dash = 6.0;
+    const gap = 4.0;
+
+    for (final m in path.computeMetrics()) {
+      double dist = 0;
+      while (dist < m.length) {
+        final len = (dist + dash < m.length) ? dash : (m.length - dist);
+        final seg = m.extractPath(dist, dist + len);
+        canvas.drawPath(seg, paint);
+        dist += dash + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) {
+    return oldDelegate.radius != radius || oldDelegate.color != color;
   }
 }

@@ -1,14 +1,15 @@
+import 'package:booking_app/models/booking_model.dart';
+import 'package:booking_app/providers/auth_providers.dart';
+import 'package:booking_app/providers/booking_providers.dart';
+import 'package:booking_app/widgets/ui/app_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-
-import '../../models/booking_model.dart';
-import '../../providers/booking_providers.dart';
-import '../../providers/auth_providers.dart';
-import '../../providers/theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class MyBookingsScreen extends StatefulWidget {
   const MyBookingsScreen({super.key});
+
+  static const routeName = '/my-bookings';
 
   @override
   State<MyBookingsScreen> createState() => _MyBookingsScreenState();
@@ -18,194 +19,176 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authProvider = context.read<AuthProvider>();
-      final uid = authProvider.currentUser?.uid;
-
+      final uid = context.read<AuthProvider>().currentUser?.uid;
       if (uid != null && uid.isNotEmpty) {
         context.read<BookingProvider>().loadUserBookings(uid);
       }
     });
   }
 
-  void _moHopThoaiDangXuat() {
-    final cs = Theme.of(context).colorScheme;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc muốn đăng xuất khỏi tài khoản này?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: cs.error,
-              foregroundColor: cs.onError,
-            ),
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await context.read<AuthProvider>().signOut(context);
-            },
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    final themeProvider = context.watch<ThemeProvider>();
-    final dangToi = themeProvider.isDark(context); // ✅ đúng theo provider mới
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Đơn đặt phòng của tôi'),
-        actions: [
-          // ✅ nút đổi sáng/tối (theo ROLE hiện tại)
-          IconButton(
-            tooltip: dangToi ? 'Chuyển sang sáng' : 'Chuyển sang tối',
-            icon: Icon(dangToi ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-            onPressed: () => context.read<ThemeProvider>().toggle(context), // ✅ cần context
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Đơn đặt phòng'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Sắp tới'),
+              Tab(text: 'Hoàn tất'),
+              Tab(text: 'Đã hủy'),
+            ],
           ),
-
-          // ✅ nút đăng xuất
-          IconButton(
-            tooltip: 'Đăng xuất',
-            icon: Icon(Icons.logout, color: cs.error),
-            onPressed: _moHopThoaiDangXuat,
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Consumer<BookingProvider>(
-        builder: (context, bookingProvider, _) {
-          if (bookingProvider.isLoading && bookingProvider.bookings.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (bookingProvider.bookings.isEmpty) {
-            return Center(
-              child: Text(
-                'Bạn chưa có đơn đặt phòng nào.',
-                style: TextStyle(
-                  color: cs.onSurface.withValues(alpha: 0.65),
-                  fontWeight: FontWeight.w600,
+        ),
+        body: Consumer<BookingProvider>(
+          builder: (context, p, _) {
+            if (p.isLoading && p.bookings.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (p.bookings.isEmpty) {
+              return Center(
+                child: Text(
+                  'Bạn chưa có đơn đặt phòng nào.',
+                  style: TextStyle(
+                    color: cs.onSurface.withValues(alpha: 0.65),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: bookingProvider.bookings.length,
-            itemBuilder: (context, index) {
-              final booking = bookingProvider.bookings[index];
-              return BookingListItem(booking: booking);
-            },
-          );
-        },
+            final upcoming = p.bookings.where((b) =>
+            b.bookingStatus == BookingStatus.pending ||
+                b.bookingStatus == BookingStatus.confirmed ||
+                b.bookingStatus == BookingStatus.checkedIn).toList();
+
+            final completed =
+            p.bookings.where((b) => b.bookingStatus == BookingStatus.checkedOut).toList();
+
+            final cancelled =
+            p.bookings.where((b) => b.bookingStatus == BookingStatus.cancelled).toList();
+
+            return TabBarView(
+              children: [
+                _BookingsList(items: upcoming),
+                _BookingsList(items: completed),
+                _BookingsList(items: cancelled),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class BookingListItem extends StatelessWidget {
-  final BookingModel booking;
+class _BookingsList extends StatelessWidget {
+  const _BookingsList({required this.items});
 
-  const BookingListItem({
-    super.key,
-    required this.booking,
-  });
+  final List<BookingModel> items;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
-    final dinhDangNgay = DateFormat('dd/MM/yyyy');
-    final dinhDangTien = NumberFormat('#,###', 'vi_VN');
-
-    final (mauTrangThai, tenTrangThai) = _trangThaiUi(context, booking.bookingStatus);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      color: cs.surface,
-      elevation: isDark ? 0 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          'Không có dữ liệu.',
+          style: TextStyle(
+            color: cs.onSurface.withValues(alpha: 0.65),
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: items.length,
+      itemBuilder: (context, i) => BookingListItem(booking: items[i]),
+    );
+  }
+}
+
+class BookingListItem extends StatelessWidget {
+  const BookingListItem({super.key, required this.booking});
+
+  final BookingModel booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dateFmt = DateFormat('dd/MM/yyyy');
+    final moneyFmt = NumberFormat('#,###', 'vi_VN');
+
+    final (statusColor, statusText) = _statusUI(context, booking.bookingStatus);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: AppCard(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   child: SizedBox(
-                    width: 84,
-                    height: 84,
+                    width: 86,
+                    height: 86,
                     child: Container(
                       color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
                       alignment: Alignment.center,
-                      child: Icon(
-                        Icons.hotel_outlined,
-                        color: cs.onSurfaceVariant,
-                        size: 34,
-                      ),
+                      child: Icon(Icons.hotel_outlined, color: cs.onSurfaceVariant, size: 34),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Khách sạn: ${booking.hotelId}',
-                        style: TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w900,
-                          color: cs.onSurface,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              booking.hotelId,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                          ),
+                          AppPill(text: statusText, color: statusColor),
+                        ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         'Phòng: ${booking.roomId}',
                         style: TextStyle(
-                          fontSize: 13.5,
                           color: cs.onSurface.withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(
-                            Icons.calendar_month_outlined,
-                            size: 16,
-                            color: cs.onSurface.withValues(alpha: 0.65),
-                          ),
+                          Icon(Icons.calendar_month_outlined,
+                              size: 16, color: cs.primary),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${dinhDangNgay.format(booking.checkInDate)}  →  ${dinhDangNgay.format(booking.checkOutDate)}',
+                              '${dateFmt.format(booking.checkInDate)} - ${dateFmt.format(booking.checkOutDate)}',
                               style: TextStyle(
-                                fontSize: 12.5,
                                 color: cs.onSurface.withValues(alpha: 0.65),
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
@@ -216,35 +199,28 @@ class BookingListItem extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 12),
             Divider(color: cs.outlineVariant.withValues(alpha: 0.35)),
             const SizedBox(height: 10),
 
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: mauTrangThai.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: mauTrangThai.withValues(alpha: 0.35)),
-                  ),
+                Expanded(
                   child: Text(
-                    tenTrangThai,
+                    'Tổng thanh toán',
                     style: TextStyle(
-                      color: mauTrangThai,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12.5,
+                      color: cs.onSurface.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
                 Text(
-                  '${dinhDangTien.format(booking.totalPrice)} VNĐ',
+                  '${moneyFmt.format(booking.totalPrice)}đ',
                   style: TextStyle(
+                    fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                    color: cs.onSurface,
+                    color: cs.primary,
                   ),
                 ),
               ],
@@ -266,13 +242,6 @@ class BookingListItem extends StatelessWidget {
                   },
                   icon: const Icon(Icons.rate_review_outlined),
                   label: const Text('Viết đánh giá'),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: cs.secondary),
-                    foregroundColor: cs.secondary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
                 ),
               ),
             ],
@@ -282,20 +251,19 @@ class BookingListItem extends StatelessWidget {
     );
   }
 
-  (Color, String) _trangThaiUi(BuildContext context, BookingStatus status) {
+  (Color, String) _statusUI(BuildContext context, BookingStatus status) {
     final cs = Theme.of(context).colorScheme;
-
     switch (status) {
       case BookingStatus.pending:
-        return (cs.tertiary, 'Chờ xác nhận');
+        return (cs.tertiary, 'CHỜ');
       case BookingStatus.confirmed:
-        return (cs.primary, 'Đã xác nhận');
+        return (cs.primary, 'ĐÃ XÁC NHẬN');
       case BookingStatus.checkedIn:
-        return (cs.secondary, 'Đã nhận phòng');
+        return (cs.secondary, 'ĐÃ NHẬN PHÒNG');
       case BookingStatus.checkedOut:
-        return (cs.onSurfaceVariant, 'Hoàn tất');
+        return (Colors.green, 'HOÀN TẤT');
       case BookingStatus.cancelled:
-        return (cs.error, 'Đã hủy');
+        return (cs.error, 'ĐÃ HỦY');
     }
   }
 }

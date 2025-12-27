@@ -42,15 +42,18 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final currencyFormatter = NumberFormat('#,###', 'vi_VN');
 
     return Scaffold(
+      backgroundColor: cs.surfaceContainerLowest,
       appBar: AppBar(
-        title: const Text('Doanh thu & Thống kê'),
+        title: const Text('Thống kê doanh thu'),
+        centerTitle: true,
         actions: [
           IconButton(
             onPressed: _reload,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Làm mới',
           ),
         ],
@@ -78,84 +81,156 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
           final double averageRevenue =
           totalBookings > 0 ? totalRevenue / totalBookings : 0.0;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildSummaryCard(
-                  context: context,
-                  title: 'Tổng doanh thu',
-                  value: '${currencyFormatter.format(totalRevenue)} VNĐ',
-                  icon: Icons.attach_money,
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
-                const SizedBox(height: 16),
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Tháng này',
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  // UI-only dropdown giống ảnh
+                  PopupMenuButton<String>(
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'this', child: Text('Tháng này')),
+                      PopupMenuItem(value: 'last', child: Text('Tháng trước')),
+                    ],
+                    icon: const Icon(Icons.expand_more_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
 
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  children: [
-                    _buildStatCard(
-                      context: context,
-                      title: 'Tổng lượt đặt',
-                      value: totalBookings.toString(),
-                      icon: Icons.bookmark_border,
-                    ),
-                    _buildStatCard(
-                      context: context,
-                      title: 'Đã xác nhận',
-                      value: confirmed.toString(),
-                      icon: Icons.check_circle_outline,
-                    ),
-                    _buildStatCard(
-                      context: context,
-                      title: 'Doanh thu TB',
-                      value: '${currencyFormatter.format(averageRevenue)} VNĐ',
-                      icon: Icons.monetization_on_outlined,
-                    ),
-                    _buildStatCard(
-                      context: context,
-                      title: 'Đã huỷ',
-                      value: cancelled.toString(),
-                      icon: Icons.cancel_outlined,
-                    ),
-                  ],
+              _SummaryRevenueCard(
+                value: '${currencyFormatter.format(totalRevenue)} đ',
+              ),
+              const SizedBox(height: 14),
+
+              _SectionTitle(title: 'Chi tiết chỉ số'),
+              const SizedBox(height: 10),
+
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                children: [
+                  _StatTile(
+                    title: 'Tổng lượt đặt',
+                    value: totalBookings.toString(),
+                    icon: Icons.bookmark_border_rounded,
+                  ),
+                  _StatTile(
+                    title: 'Đã xác nhận',
+                    value: confirmed.toString(),
+                    icon: Icons.verified_rounded,
+                  ),
+                  _StatTile(
+                    title: 'Đã huỷ',
+                    value: cancelled.toString(),
+                    icon: Icons.cancel_rounded,
+                  ),
+                  _StatTile(
+                    title: 'Doanh thu TB',
+                    value: '${currencyFormatter.format(averageRevenue)} đ',
+                    icon: Icons.monetization_on_outlined,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 14),
+              _SectionTitle(title: 'Xu hướng doanh thu'),
+              const SizedBox(height: 10),
+
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
                 ),
-              ],
-            ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(Icons.show_chart_rounded, color: cs.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Chưa có dữ liệu theo ngày/tuần để vẽ biểu đồ.\n(Chức năng vẫn giữ nguyên)',
+                          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.75)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
   }
+}
 
-  Widget _buildSummaryCard({
-    required BuildContext context,
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Text(
+      title,
+      style: t.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+    );
+  }
+}
+
+class _SummaryRevenueCard extends StatelessWidget {
+  final String value;
+
+  const _SummaryRevenueCard({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: color,
+      elevation: 0,
+      color: cs.primary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(18),
         child: Row(
           children: [
-            Icon(icon, size: 48, color: Colors.black),
-            const SizedBox(width: 16),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.attach_money_rounded, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
-                    style: const TextStyle(color: Colors.black54, fontSize: 16),
+                    'Tổng doanh thu',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -163,9 +238,9 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
@@ -176,36 +251,51 @@ class _RevenueStatsScreenState extends State<RevenueStatsScreen> {
       ),
     );
   }
+}
 
-  Widget _buildStatCard({
-    required BuildContext context,
-    required String title,
-    required String value,
-    required IconData icon,
-  }) {
-    final theme = Theme.of(context);
+class _StatTile extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+
+  const _StatTile({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
 
     return Card(
-      color: theme.colorScheme.surface,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      color: cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.55)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, size: 36, color: theme.colorScheme.secondary),
-            const SizedBox(height: 8),
+            Icon(icon, color: cs.primary, size: 28),
+            const Spacer(),
             Text(
               title,
-              style: const TextStyle(color: Colors.grey, fontSize: 14),
+              style: TextStyle(
+                color: cs.onSurface.withValues(alpha: 0.72),
+                fontWeight: FontWeight.w700,
+              ),
             ),
+            const SizedBox(height: 6),
             Text(
               value,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+              style: TextStyle(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
               ),
             ),
           ],

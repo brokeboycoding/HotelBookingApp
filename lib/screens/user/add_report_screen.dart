@@ -1,22 +1,29 @@
-import 'package:booking_app/providers/report_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:booking_app/providers/report_providers.dart' as rpt;
+
 class AddReportScreen extends StatefulWidget {
-  final String hotelId;
-  final String? roomId;
-
-  // ✅ thêm mấy cái này
-  final String? hotelName;
-  final String? roomLabel; // ví dụ: "Phòng 101" hoặc "Deluxe - 101"
-
   const AddReportScreen({
     super.key,
     required this.hotelId,
     this.roomId,
     this.hotelName,
     this.roomLabel,
+    this.address,
+    this.thumbnailUrl,
   });
+
+  static const routeName = '/add-report';
+
+  final String hotelId;
+  final String? roomId;
+
+  // UI-only
+  final String? hotelName;
+  final String? roomLabel;
+  final String? address;
+  final String? thumbnailUrl;
 
   @override
   State<AddReportScreen> createState() => _AddReportScreenState();
@@ -27,6 +34,17 @@ class _AddReportScreenState extends State<AddReportScreen> {
   final _lyDoCtrl = TextEditingController();
   final _moTaCtrl = TextEditingController();
 
+  final List<String> _reasons = const [
+    'Hình ảnh không đúng mô tả',
+    'Giá/Phí không đúng',
+    'Thông tin sai lệch',
+    'Vấn đề vệ sinh',
+    'Lừa đảo / Không an toàn',
+    'Khác',
+  ];
+
+  String? _selectedReason;
+
   @override
   void dispose() {
     _lyDoCtrl.dispose();
@@ -34,32 +52,20 @@ class _AddReportScreenState extends State<AddReportScreen> {
     super.dispose();
   }
 
-  void _thongBao(String noiDung, {bool laLoi = false}) {
-    final cs = Theme.of(context).colorScheme;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          noiDung,
-          style: TextStyle(
-            color: laLoi ? cs.onErrorContainer : cs.onTertiaryContainer,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: laLoi ? cs.errorContainer : cs.tertiaryContainer,
-      ),
-    );
-  }
-
   Future<void> _guiBaoCao() async {
     FocusScope.of(context).unfocus();
+
+    // Đồng bộ lý do
+    if (_selectedReason != null && _selectedReason != 'Khác') {
+      _lyDoCtrl.text = _selectedReason!;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
-    final reportProvider = context.read<ReportProvider>();
+    final provider = context.read<rpt.ReportProvider>();
 
     try {
-      await reportProvider.addReport(
+      await provider.addReport(
         hotelId: widget.hotelId,
         roomId: widget.roomId,
         reason: _lyDoCtrl.text.trim(),
@@ -67,180 +73,240 @@ class _AddReportScreenState extends State<AddReportScreen> {
       );
 
       if (!mounted) return;
-      _thongBao('Cảm ơn bạn! Báo cáo đã được gửi.');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cảm ơn bạn! Báo cáo đã được gửi.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
       Navigator.of(context).pop();
     } catch (_) {
       if (!mounted) return;
-      _thongBao(
-        reportProvider.errorMessage ?? 'Không thể gửi báo cáo. Vui lòng thử lại.',
-        laLoi: true,
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.errorMessage ?? 'Không thể gửi báo cáo. Vui lòng thử lại.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
 
-    final hotelText = widget.hotelName?.trim().isNotEmpty == true
+    final hotelText = (widget.hotelName ?? '').trim().isNotEmpty
         ? widget.hotelName!.trim()
-        : widget.hotelId;
+        : 'Khách sạn';
 
-    final roomText = widget.roomLabel?.trim().isNotEmpty == true
+    final roomText = (widget.roomLabel ?? '').trim().isNotEmpty
         ? widget.roomLabel!.trim()
         : (widget.roomId ?? '');
 
+    final addrText = (widget.address ?? '').trim();
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Báo cáo vi phạm'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Card(
-                color: cs.surface,
-                elevation: isDark ? 0 : 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Khách sạn: $hotelText',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                      if (widget.roomId != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          'Phòng: $roomText',
-                          style: TextStyle(
-                            color: cs.onSurface.withValues(alpha: 0.75),
-                            fontWeight: FontWeight.w600,
+      appBar: AppBar(title: const Text('Báo cáo vi phạm')),
+      body: Consumer<rpt.ReportProvider>(
+        builder: (context, p, _) {
+          return AbsorbPointer(
+            absorbing: p.isLoading,
+            child: Stack(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: cs.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: SizedBox(
+                                    width: 70,
+                                    height: 70,
+                                    child: (widget.thumbnailUrl ?? '').trim().isNotEmpty
+                                        ? Image.network(
+                                      widget.thumbnailUrl!.trim(),
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _thumbFallback(cs),
+                                    )
+                                        : _thumbFallback(cs),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        hotelText,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16.5,
+                                          color: cs.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        [
+                                          if (roomText.trim().isNotEmpty) roomText.trim(),
+                                          if (addrText.isNotEmpty) addrText,
+                                        ].join(' • '),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: cs.primary,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
+
+                        const SizedBox(height: 18),
+
+                        Text(
+                          'Tại sao bạn báo cáo nơi này?',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // ✅ Flutter mới: dùng initialValue (không dùng value)
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedReason,
+                          items: _reasons
+                              .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                              .toList(),
+                          onChanged: (v) {
+                            setState(() {
+                              _selectedReason = v;
+                              if (v != null && v != 'Khác') _lyDoCtrl.text = v;
+                            });
+                          },
+                          decoration: const InputDecoration(
+                            hintText: 'Chọn lý do phù hợp nhất...',
+                            prefixIcon: Icon(Icons.flag_outlined),
+                          ),
+                          validator: (_) {
+                            if ((_selectedReason ?? '').isEmpty) return 'Vui lòng chọn lý do';
+                            if (_selectedReason == 'Khác' && _lyDoCtrl.text.trim().isEmpty) {
+                              return 'Vui lòng nhập lý do';
+                            }
+                            return null;
+                          },
+                        ),
+
+                        if (_selectedReason == 'Khác') ...[
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _lyDoCtrl,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Lý do (khác)',
+                              prefixIcon: Icon(Icons.edit_outlined),
+                            ),
+                            validator: (v) {
+                              final s = (v ?? '').trim();
+                              if (_selectedReason == 'Khác' && s.isEmpty) return 'Vui lòng nhập lý do';
+                              return null;
+                            },
+                          ),
+                        ],
+
+                        const SizedBox(height: 18),
+
+                        Text(
+                          'Mô tả chi tiết',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        TextFormField(
+                          controller: _moTaCtrl,
+                          maxLines: 6,
+                          decoration: const InputDecoration(
+                            hintText: 'Hãy chia sẻ thêm thông tin chi tiết về vấn đề bạn gặp phải...',
+                            alignLabelWithHint: true,
+                          ),
+                          validator: (v) {
+                            final s = (v ?? '').trim();
+                            if (s.isEmpty) return 'Vui lòng mô tả chi tiết';
+                            if (s.length < 10) return 'Mô tả quá ngắn (tối thiểu 10 ký tự).';
+                            return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: p.isLoading ? null : _guiBaoCao,
+                            icon: const Icon(Icons.send),
+                            label: const Text('Gửi báo cáo'),
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 18),
-
-              TextFormField(
-                controller: _lyDoCtrl,
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  labelText: 'Lý do báo cáo',
-                  hintText: 'Ví dụ: Thông tin sai, vấn đề vệ sinh, lừa đảo…',
-                  prefixIcon: const Icon(Icons.flag_outlined),
-                  suffixIcon: _lyDoCtrl.text.trim().isEmpty
-                      ? null
-                      : IconButton(
-                    tooltip: 'Xóa',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _lyDoCtrl.clear();
-                      setState(() {});
-                    },
+                if (p.isLoading)
+                  Positioned.fill(
+                    child: Container(
+                      color: cs.surface.withValues(alpha: 0.35),
+                      alignment: Alignment.center,
+                      child: const CircularProgressIndicator(),
+                    ),
                   ),
-                ),
-                onChanged: (_) => setState(() {}),
-                validator: (value) {
-                  final v = (value ?? '').trim();
-                  if (v.isEmpty) return 'Vui lòng nhập lý do báo cáo';
-                  if (v.length < 5) return 'Lý do quá ngắn (tối thiểu 5 ký tự).';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _moTaCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Mô tả chi tiết',
-                  hintText: 'Hãy mô tả rõ sự việc để chúng tôi xử lý nhanh hơn…',
-                  alignLabelWithHint: true,
-                  prefixIcon: const Icon(Icons.description_outlined),
-                  suffixIcon: _moTaCtrl.text.trim().isEmpty
-                      ? null
-                      : IconButton(
-                    tooltip: 'Xóa',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _moTaCtrl.clear();
-                      setState(() {});
-                    },
-                  ),
-                ),
-                maxLines: 5,
-                onChanged: (_) => setState(() {}),
-                validator: (value) {
-                  final v = (value ?? '').trim();
-                  if (v.isEmpty) return 'Vui lòng mô tả chi tiết vấn đề';
-                  if (v.length < 10) return 'Mô tả quá ngắn (tối thiểu 10 ký tự).';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              SizedBox(
-                width: double.infinity,
-                child: Consumer<ReportProvider>(
-                  builder: (context, provider, _) {
-                    return ElevatedButton.icon(
-                      onPressed: provider.isLoading ? null : _guiBaoCao,
-                      icon: provider.isLoading
-                          ? SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.onPrimary,
-                        ),
-                      )
-                          : const Icon(Icons.report_outlined),
-                      label: Text(provider.isLoading ? 'Đang gửi…' : 'Gửi báo cáo'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                'Lưu ý: Báo cáo sẽ được kiểm duyệt. Vui lòng cung cấp thông tin chính xác.',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: cs.onSurface.withValues(alpha: 0.65),
-                ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  Widget _thumbFallback(ColorScheme cs) {
+    return Container(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+      alignment: Alignment.center,
+      child: Icon(Icons.hotel_outlined, color: cs.onSurfaceVariant, size: 30),
     );
   }
 }

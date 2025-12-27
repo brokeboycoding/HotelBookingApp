@@ -16,11 +16,28 @@ class ThemeProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ default theo mockup:
+  // - Admin: dark
+  // - Owner/User: light
+  // - Guest: system
+  static String _defaultValueForKey(String key) {
+    switch (key) {
+      case 'theme_mode_admin':
+        return 'dark';
+      case 'theme_mode_owner':
+      case 'theme_mode_user':
+        return 'light';
+      default:
+        return 'system';
+    }
+  }
+
   final Map<String, ThemeMode> _modes = {};
 
   UserRole? _currentRole; // null = guest
   UserRole? get currentRole => _currentRole;
 
+  /// themeMode hiện tại theo role đang active
   ThemeMode get mode => _modes[_keyFor(_currentRole)] ?? ThemeMode.system;
 
   void setCurrentRole(UserRole? role) {
@@ -40,7 +57,7 @@ class ThemeProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
 
     Future<void> loadKey(String key) async {
-      final v = prefs.getString(key) ?? 'system';
+      final v = prefs.getString(key) ?? _defaultValueForKey(key);
       _modes[key] = switch (v) {
         'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,

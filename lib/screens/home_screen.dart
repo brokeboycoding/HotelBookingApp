@@ -1,6 +1,7 @@
 import 'package:booking_app/models/room_model.dart';
 import 'package:booking_app/providers/hotel_providers.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_providers.dart';
@@ -11,51 +12,55 @@ import '../models/notification_model.dart';
 
 import 'room_details_screen.dart';
 import 'notifications/notifications_screen.dart';
-
-// ✅ NEW: màn chọn khách sạn (để có hotelId trước khi đi manage/post)
 import 'hotel_owner/select_hotel_screen.dart';
 
-/// ✅ Bộ icon đẹp (Material Rounded) – đổi 1 nơi, cả app đổi theo
+/// ✅ Bộ icon đẹp (Material Rounded)
 class AppIcons {
   // AppBar
   static const notify = Icons.notifications_none_rounded;
   static const themeDark = Icons.dark_mode_rounded;
   static const themeLight = Icons.light_mode_rounded;
   static const logout = Icons.logout_rounded;
-  static const chevron = Icons.chevron_right_rounded;
 
-  // User - Search tabs
+  // Switch role
+  static const switchRole = Icons.swap_horiz_rounded;
+
+  // User - tabs
   static const stay = Icons.hotel_rounded;
   static const flight = Icons.flight_takeoff_rounded;
   static const car = Icons.directions_car_filled_rounded;
   static const experience = Icons.local_activity_rounded;
   static const search = Icons.travel_explore_rounded;
 
-  // Bottom nav - common
+  // Search card fields
+  static const where = Icons.location_on_outlined;
+  static const calendar = Icons.calendar_month_rounded;
+  static const people = Icons.people_alt_outlined;
+
+  // Bottom nav
   static const home = Icons.home_rounded;
   static const profile = Icons.account_circle_rounded;
-
-  // User bottom nav
   static const bookings = Icons.event_available_rounded;
 
-  // Owner bottom nav
+  // Owner nav
   static const dashboard = Icons.space_dashboard_rounded;
   static const rooms = Icons.meeting_room_rounded;
   static const chat = Icons.forum_rounded;
 
-  // Admin bottom nav + tiles
+  // Admin tiles
   static const approve = Icons.fact_check_rounded;
   static const manage = Icons.domain_rounded;
   static const reports = Icons.report_problem_rounded;
   static const monitorBookings = Icons.event_note_rounded;
-  static const settings = Icons.settings_rounded;
 
   // Owner tiles
   static const postRoom = Icons.add_home_work_rounded;
   static const stats = Icons.query_stats_rounded;
   static const reviews = Icons.rate_review_rounded;
 
-  // Others
+  // UI
+  static const chevron = Icons.chevron_right_rounded;
+  static const heartOutline = Icons.favorite_border_rounded;
   static const imageFallback = Icons.broken_image_outlined;
 }
 
@@ -68,7 +73,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _chiMucDuoi = 0;
-  UserRole? _lastRole;
+
+  String? _lastUid;
+  UserRole? _lastActiveRole;
+
+  final _vnd = NumberFormat.decimalPattern('vi_VN');
 
   String? _roleToString(UserRole? role) {
     switch (role) {
@@ -83,7 +92,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ✅ NEW: mở màn chọn khách sạn trước khi đi route cần hotelId
+  String _labelRole(UserRole r) {
+    switch (r) {
+      case UserRole.admin:
+        return 'Admin';
+      case UserRole.hotelOwner:
+        return 'Chủ khách sạn';
+      case UserRole.user:
+        return 'Khách hàng';
+    }
+  }
+
+  // ✅ mở màn chọn khách sạn trước khi đi route cần hotelId
   void _moChonKhachSan({
     required String targetRoute,
     required String title,
@@ -98,46 +118,57 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
+  void _syncSideEffects(UserModel user, UserRole activeRole) {
+    if (_lastUid == user.uid && _lastActiveRole == activeRole) return;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final auth = context.read<AuthProvider>();
-      final user = auth.currentUser;
+    _lastUid = user.uid;
+    _lastActiveRole = activeRole;
 
-      // ✅ set theme role cho ThemeProvider
-      context.read<ThemeProvider>().setCurrentRole(user?.role);
+    // ✅ listener badge thông báo theo activeRole
+    context.read<NotificationProvider>().startUnreadListener(
+      userId: user.uid,
+      role: _roleToString(activeRole),
+    );
 
-      // ✅ start listener thông báo (để badge cập nhật realtime)
-      if (user != null) {
-        context.read<NotificationProvider>().startUnreadListener(
-          userId: user.uid, // nếu user.id của bạn là uid
-          role: _roleToString(user.role),
-        );
-      }
+    // ✅ load rooms cho chế độ user
+    if (activeRole == UserRole.user) {
+      context.read<HotelProvider>().fetchAllRooms();
+    }
+  }
 
-      // load rooms cho user
-      if (user?.role == UserRole.user) {
-        context.read<HotelProvider>().fetchAllRooms();
-      }
-    });
+  void _doiCheDo(UserModel user, UserRole newRole) {
+    setState(() => _chiMucDuoi = 0);
+    context.read<ThemeProvider>().setCurrentRole(newRole);
+    _syncSideEffects(user, newRole);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    final role = context.read<AuthProvider>().currentUser?.role;
-    if (role != _lastRole) {
-      _lastRole = role;
-      context.read<ThemeProvider>().setCurrentRole(role);
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    final themeProvider = context.read<ThemeProvider>();
+
+    // ✅ nếu currentRole null hoặc không nằm trong switchableRoles -> set về primaryRole
+    final cur = themeProvider.currentRole;
+    final allowed = (cur != null) && user.switchableRoles.contains(cur);
+    if (!allowed) {
+      themeProvider.setCurrentRole(user.primaryRole);
     }
+
+    final activeRole = themeProvider.currentRole ?? user.primaryRole;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncSideEffects(user, activeRole);
+    });
   }
 
   void _chonTab(UserRole role, int index) {
     if (index == _chiMucDuoi) return;
-
     setState(() => _chiMucDuoi = index);
 
     if (role == UserRole.user) {
@@ -161,7 +192,6 @@ class _HomeScreenState extends State<HomeScreen> {
         case 0:
           return;
         case 1:
-        // ✅ FIX: trước đây pushNamed('/manage-rooms') => thiếu hotelId
           _moChonKhachSan(
             targetRoute: '/manage-rooms',
             title: 'Chọn khách sạn để quản lý phòng',
@@ -204,46 +234,69 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // ✅ theme theo role + icon đúng
     final themeProvider = context.watch<ThemeProvider>();
+    final activeRole = themeProvider.currentRole ?? user.primaryRole;
     final dangToi = themeProvider.isDark(context);
 
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
         toolbarHeight: 82,
-        title: _tieuDeAppBar(user),
+        titleSpacing: 16,
         automaticallyImplyLeading: false,
+        elevation: 0,
+        backgroundColor: cs.surface,
+        surfaceTintColor: cs.surface,
+        title: _tieuDeAppBar(user, activeRole),
         actions: [
-          // ✅ NÚT SÁNG/TỐI (lưu riêng theo role)
-          IconButton(
+          if (user.switchableRoles.length > 1)
+            PopupMenuButton<UserRole>(
+              tooltip: 'Đổi chế độ',
+              initialValue: activeRole,
+              onSelected: (r) => _doiCheDo(user, r),
+              itemBuilder: (context) => user.switchableRoles
+                  .map(
+                    (r) => PopupMenuItem<UserRole>(
+                  value: r,
+                  child: Text(_labelRole(r)),
+                ),
+              )
+                  .toList(),
+              icon: Icon(AppIcons.switchRole, color: cs.onSurface),
+            ),
+
+          _nutThongBao(user, activeRole),
+
+          _circleIcon(
+            icon: dangToi ? AppIcons.themeLight : AppIcons.themeDark,
             tooltip: dangToi ? 'Chuyển sang sáng' : 'Chuyển sang tối',
-            icon: Icon(dangToi ? AppIcons.themeLight : AppIcons.themeDark),
-            onPressed: () => context.read<ThemeProvider>().toggle(context),
+            onTap: () => context.read<ThemeProvider>().toggle(context),
           ),
 
-          // ✅ Đăng xuất
-          IconButton(
+          _circleIcon(
+            icon: AppIcons.logout,
             tooltip: 'Đăng xuất',
-            icon: Icon(AppIcons.logout, color: cs.error),
-            onPressed: () => _hopThoaiDangXuat(context),
+            bg: cs.error.withValues(alpha: 0.12),
+            fg: cs.error,
+            onTap: () => _hopThoaiDangXuat(context),
           ),
-          const SizedBox(width: 6),
+
+          const SizedBox(width: 10),
         ],
       ),
-      body: _noiDungTheoVaiTro(context, user.role, user),
-      bottomNavigationBar: _thanhDieuHuongDuoi(user.role),
+      body: _noiDungTheoVaiTro(context, activeRole, user),
+      bottomNavigationBar: _thanhDieuHuongDuoi(activeRole),
     );
   }
 
   // =========================
-  // AppBar
+  // AppBar title (giống mockup)
   // =========================
-  Widget _tieuDeAppBar(UserModel user) {
+  Widget _tieuDeAppBar(UserModel user, UserRole activeRole) {
     final cs = Theme.of(context).colorScheme;
-
     final ten = user.name.trim();
-    final roleStr = _roleToString(user.role);
+
+    final subtitle = (activeRole == UserRole.user) ? 'Xin chào,' : 'Welcome back,';
 
     return Row(
       children: [
@@ -256,178 +309,254 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(width: 14),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Xin chào,',
-              style: TextStyle(
-                color: cs.onSurface.withValues(alpha: 0.65),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              ten.isNotEmpty ? ten : 'Người dùng',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                color: cs.onSurface,
-              ),
-            ),
-          ],
-        ),
-        const Spacer(),
-
-        // ✅ Chuông + badge số chưa đọc
-        StreamBuilder<List<AppNotification>>(
-          stream: context.read<NotificationProvider>().streamNotifications(
-            userId: user.uid, // uid
-            role: roleStr,
-            onlyUnread: true,
-          ),
-          builder: (context, snapshot) {
-            final unread = snapshot.data?.length ?? 0;
-
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  tooltip: 'Thông báo',
-                  icon: Icon(
-                    AppIcons.notify,
-                    size: 28,
-                    color: cs.onSurface,
-                  ),
-                  onPressed: () {
-                    Navigator.pushNamed(
-                      context,
-                      NotificationsScreen.routeName,
-                    );
-                  },
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: cs.onSurface.withValues(alpha: 0.62),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
                 ),
-                if (unread > 0)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: cs.error,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: cs.surface, width: 2),
-                      ),
-                      constraints: const BoxConstraints(minWidth: 18),
-                      child: Text(
-                        unread > 99 ? '99+' : unread.toString(),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: cs.onError,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w900,
-                        ),
+              ),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      ten.isNotEmpty ? ten : 'Người dùng',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: cs.onSurface,
                       ),
                     ),
                   ),
-              ],
-            );
-          },
+                  if (activeRole == UserRole.user) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade500,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 
+  Widget _circleIcon({
+    required IconData icon,
+    required VoidCallback onTap,
+    String? tooltip,
+    Color? bg,
+    Color? fg,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: (bg ?? cs.surfaceContainerHighest.withValues(alpha: 0.55)),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Icon(icon, color: fg ?? cs.onSurface, size: 20),
+        ),
+      ),
+    );
+  }
+
+  // 🔔 Chuông + badge (role theo activeRole)
+  Widget _nutThongBao(UserModel user, UserRole activeRole) {
+    final cs = Theme.of(context).colorScheme;
+    final roleStr = _roleToString(activeRole);
+
+    return StreamBuilder<List<AppNotification>>(
+      stream: context.read<NotificationProvider>().streamNotifications(
+        userId: user.uid,
+        role: roleStr,
+        onlyUnread: true,
+      ),
+      builder: (context, snapshot) {
+        final unread = snapshot.data?.length ?? 0;
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _circleIcon(
+              icon: AppIcons.notify,
+              tooltip: 'Thông báo',
+              onTap: () => Navigator.pushNamed(context, NotificationsScreen.routeName),
+            ),
+            if (unread > 0)
+              Positioned(
+                right: 4,
+                top: 2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: cs.surface, width: 2),
+                  ),
+                  constraints: const BoxConstraints(minWidth: 18),
+                  child: Text(
+                    unread > 99 ? '99+' : unread.toString(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: cs.onError,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   // =========================
-  // Body theo vai trò
+  // Body theo vai trò (activeRole)
   // =========================
-  Widget _noiDungTheoVaiTro(
-      BuildContext context, UserRole role, UserModel user) {
+  Widget _noiDungTheoVaiTro(BuildContext context, UserRole role, UserModel user) {
     switch (role) {
       case UserRole.admin:
-        return _bangDieuKhienAdmin(context);
+        return _bangDieuKhienAdmin(context, user: user);
       case UserRole.hotelOwner:
-        return _bangDieuKhienChuKS(context);
+        return _bangDieuKhienChuKS(context, user: user);
       case UserRole.user:
         return _bangTrangChuNguoiDung(context);
     }
   }
 
-  // -------------------------
-  // USER
-  // -------------------------
+  // =========================
+  // USER HOME (match mockup)
+  // =========================
   Widget _bangTrangChuNguoiDung(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
     return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Text(
-              'Bạn muốn đi đâu\nhôm nay?',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                height: 1.1,
-              ),
+          const SizedBox(height: 10),
+
+          // Quick actions (4 icon)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _quickActionMock('Lưu trú', AppIcons.stay,
+                      bg: const Color(0xFFEAF2FF), fg: const Color(0xFF2F80ED)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _quickActionMock('Chuyến bay', AppIcons.flight,
+                      bg: const Color(0xFFFFF2E8), fg: const Color(0xFFF2994A)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _quickActionMock('Xe', AppIcons.car,
+                      bg: const Color(0xFFEAFBF1), fg: const Color(0xFF27AE60)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _quickActionMock('Trải nghiệm', AppIcons.experience,
+                      bg: const Color(0xFFF1ECFF), fg: const Color(0xFF7B61FF)),
+                ),
+              ],
             ),
           ),
-          _theTimKiem(),
-          const SizedBox(height: 10),
+
+          const SizedBox(height: 14),
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'Gợi ý nổi bật',
+              'Tìm nơi dừng chân',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w900,
                 color: cs.onSurface,
               ),
             ),
           ),
-          _danhSachGoiY(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+
+          _searchCardUserMock(),
+          const SizedBox(height: 12),
+
+          _recentHeader(),
+          _recentChipsRow(),
+
+          const SizedBox(height: 14),
+          _promoBannerMock(),
+
+          const SizedBox(height: 10),
+          _sectionHeader(
+            title: 'Gợi ý nổi bật',
+            actionText: 'Xem tất cả',
+            onTap: () => Navigator.pushNamed(context, '/search'),
+          ),
+          _featuredGridRooms(),
+          const SizedBox(height: 14),
         ],
       ),
     );
   }
 
-  Widget _theTimKiem() {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
-        ),
-      ),
+  Widget _quickActionMock(
+      String label,
+      IconData icon, {
+        required Color bg,
+        required Color fg,
+      }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => Navigator.pushNamed(context, '/search'),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _tabTimKiem('Lưu trú', AppIcons.stay, isChon: true),
-              _tabTimKiem('Chuyến bay', AppIcons.flight),
-              _tabTimKiem('Xe', AppIcons.car),
-              _tabTimKiem('Trải nghiệm', AppIcons.experience),
-            ],
+          Container(
+            height: 52,
+            width: 52,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: fg),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/search'),
-              icon: const Icon(AppIcons.search),
-              label: const Text('Tìm kiếm'),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -435,39 +564,361 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _tabTimKiem(String tieuDe, IconData icon, {bool isChon = false}) {
+  Widget _searchCardUserMock() {
     final cs = Theme.of(context).colorScheme;
-    final mau = isChon ? cs.secondary : cs.onSurface.withValues(alpha: 0.55);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Column(
-      children: [
-        Icon(icon, color: mau, size: 28),
-        const SizedBox(height: 4),
-        Text(
-          tieuDe,
-          style: TextStyle(
-            color: mau,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+    Widget field({
+      required IconData icon,
+      required String title,
+      required String value,
+    }) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.pushNamed(context, '/search'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: isDark ? 0.35 : 0.55),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: cs.onSurface.withValues(alpha: 0.70)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w900,
+                        color: cs.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w900,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+        ],
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6)),
+      ),
+      child: Column(
+        children: [
+          field(icon: AppIcons.where, title: 'Điểm đến', value: 'Đà Lạt, Lâm Đồng'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: field(icon: AppIcons.calendar, title: 'Ngày nhận', value: '20 Th11'),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: field(icon: AppIcons.calendar, title: 'Ngày trả', value: '23 Th11'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          field(icon: AppIcons.people, title: 'Khách & phòng', value: '2 người lớn, 1 phòng'),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/search'),
+              icon: const Icon(AppIcons.search),
+              label: const Text('Tìm kiếm', style: TextStyle(fontWeight: FontWeight.w900)),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _danhSachGoiY() {
+  Widget _recentHeader() {
     final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Tìm kiếm gần đây',
+              style: TextStyle(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () {},
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Text(
+                'Xóa',
+                style: TextStyle(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _recentChipsRow() {
+    final cs = Theme.of(context).colorScheme;
+    final chips = const [
+      'Hồ Chí Minh',
+      'Đà Nẵng',
+      'Phú Quốc',
+    ];
 
     return SizedBox(
-      height: 220,
+      height: 40,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 16, color: cs.onSurface.withValues(alpha: 0.6)),
+                const SizedBox(width: 6),
+                Text(
+                  chips[i],
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: cs.onSurface.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _promoBannerMock() {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    const imgUrl =
+        'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=70';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 130,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(imgUrl, fit: BoxFit.cover),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.black.withValues(alpha: 0.60),
+                    Colors.transparent,
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: cs.primary,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'HOT DEAL',
+                  style: TextStyle(
+                    color: cs.onPrimary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 14,
+              bottom: 14,
+              right: 14,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Mùa Thu Vàng',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Giảm ngay 20% cho các điểm đến phía Bắc',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.88),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 34,
+                          child: FilledButton(
+                            onPressed: () => Navigator.pushNamed(context, '/search'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: cs.surface,
+                              foregroundColor: cs.onSurface,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('Xem ngay', style: TextStyle(fontWeight: FontWeight.w900)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionHeader({
+    required String title,
+    String? actionText,
+    VoidCallback? onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          if (actionText != null)
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Text(
+                  actionText,
+                  style: TextStyle(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // =========================
+  // Featured grid giống mockup (2 cột)
+  // =========================
+  Widget _featuredGridRooms() {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Consumer<HotelProvider>(
         builder: (context, hotelProvider, child) {
-          if (hotelProvider.isLoading && hotelProvider.rooms.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+          final rooms = hotelProvider.rooms;
+          if (hotelProvider.isLoading && rooms.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Center(child: CircularProgressIndicator()),
+            );
           }
 
-          if (hotelProvider.rooms.isEmpty) {
-            return Center(
+          if (rooms.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
               child: Text(
                 'Chưa có gợi ý nào.',
                 style: TextStyle(color: cs.onSurface.withValues(alpha: 0.65)),
@@ -475,98 +926,184 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          return ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: hotelProvider.rooms.length,
-            itemBuilder: (context, index) {
-              final room = hotelProvider.rooms[index];
-              return _theKhachSan(room);
-            },
+          final show = rooms.take(4).toList();
+
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: show.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.78,
+            ),
+            itemBuilder: (_, i) => _roomFeatureCard(show[i]),
           );
         },
       ),
     );
   }
 
-  Widget _theKhachSan(RoomModel room) {
+  String _tryPriceText(RoomModel room) {
+    try {
+      final dynamic any = room;
+      final p = any.pricePerNight ?? any.price ?? any.pricePerDay ?? any.pricePerRoom;
+      if (p == null) return '';
+      if (p is num) {
+        return '${_vnd.format(p)}đ/đêm';
+      }
+      return p.toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _tryLocationText(RoomModel room) {
+    try {
+      final dynamic any = room;
+      final city = any.city ?? any.location ?? any.address;
+      if (city == null) return 'Mã KS: ${room.hotelId}';
+      return city.toString();
+    } catch (_) {
+      return 'Mã KS: ${room.hotelId}';
+    }
+  }
+
+  Widget _roomFeatureCard(RoomModel room) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final anh = room.images.isNotEmpty ? room.images.first.trim() : '';
     final coAnh = anh.isNotEmpty;
 
-    return GestureDetector(
+    final price = _tryPriceText(room);
+    final location = _tryLocationText(room);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
       onTap: () => Navigator.of(context).pushNamed(
         RoomDetailsScreen.routeName,
         arguments: room,
       ),
       child: Container(
-        width: 160,
-        margin: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-        ),
-        child: Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: SizedBox(
-                width: double.infinity,
-                height: double.infinity,
-                child: coAnh
-                    ? Image.network(
-                  anh,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => _anhLoi(),
-                )
-                    : _anhLoi(),
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6)),
+          boxShadow: [
+            if (!isDark)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
               ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    cs.onSurface.withValues(alpha: 0.55),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // image
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    coAnh
+                        ? Image.network(
+                      anh,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _anhLoi(),
+                    )
+                        : _anhLoi(),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: cs.surface.withValues(alpha: 0.88),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.star_rounded, size: 14, color: Color(0xFFF2C94C)),
+                            const SizedBox(width: 4),
+                            Text(
+                              '4.8',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: cs.onSurface,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    room.type,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: cs.surface,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
+
+              // info
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      room.type,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: cs.onSurface,
+                        fontSize: 14.5,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Mã KS: ${room.hotelId}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: cs.surface.withValues(alpha: 0.85),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 4),
+                    Text(
+                      location,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.65),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            price.isNotEmpty ? price : 'Xem chi tiết',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: cs.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(AppIcons.chevron, color: cs.primary, size: 18),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -581,177 +1118,603 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // -------------------------
-  // OWNER
-  // -------------------------
-  Widget _bangDieuKhienChuKS(BuildContext context) {
+  // =========================
+  // OWNER DASH (match mockup)
+  // =========================
+  Widget _bangDieuKhienChuKS(BuildContext context, {required UserModel user}) {
+    final cs = Theme.of(context).colorScheme;
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       children: [
-        _mucBangDieuKhien(
-          icon: AppIcons.postRoom,
-          tieuDe: 'Đăng phòng',
-          moTa: 'Thêm phòng mới cho khách sạn của bạn',
-          // ✅ FIX: mở chọn khách sạn -> rồi mới vào /post-room
-          onTap: () => _moChonKhachSan(
-            targetRoute: '/post-room',
-            title: 'Chọn khách sạn để đăng phòng',
-          ),
+        // segment "Chủ nhà | Khách" giống mockup
+        _segmentedOwnerGuest(user),
+
+        const SizedBox(height: 12),
+
+        _blueWelcomeBanner(
+          title: 'Chào mừng trở lại!',
+          subtitle: 'Hôm nay là một ngày tuyệt vời để\nquản lý khách sạn của bạn.',
         ),
-        _mucBangDieuKhien(
-          icon: AppIcons.manage,
-          tieuDe: 'Quản lý phòng',
-          moTa: 'Chỉnh sửa hoặc xoá các phòng đã đăng',
-          // ✅ FIX: mở chọn khách sạn -> rồi mới vào /manage-rooms
-          onTap: () => _moChonKhachSan(
-            targetRoute: '/manage-rooms',
-            title: 'Chọn khách sạn để quản lý phòng',
-          ),
+
+        const SizedBox(height: 14),
+
+        Row(
+          children: [
+            Expanded(
+              child: _statMiniMock(
+                icon: Icons.home_work_rounded,
+                label: 'Đặt phòng mới',
+                value: '12',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _statMiniMock(
+                icon: Icons.payments_rounded,
+                label: 'Doanh thu',
+                value: '5.2tr',
+                suffix: 'VND',
+                tint: Colors.green,
+              ),
+            ),
+          ],
         ),
-        _mucBangDieuKhien(
-          icon: AppIcons.stats,
-          tieuDe: 'Thống kê',
-          moTa: 'Xem doanh thu và các chỉ số',
-          onTap: () => Navigator.of(context).pushNamed('/revenue-stats'),
+
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Text(
+              'Quản lý',
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+          ],
         ),
-        _mucBangDieuKhien(
-          icon: AppIcons.reviews,
-          tieuDe: 'Đánh giá',
-          moTa: 'Xem đánh giá từ khách hàng',
-          onTap: () => Navigator.of(context).pushNamed('/reviews'),
+
+        const SizedBox(height: 12),
+
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.05,
+          children: [
+            _tileMock(
+              title: 'Đăng phòng',
+              subtitle: 'Thêm phòng trống mới',
+              imageUrl:
+              'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.postRoom,
+              onTap: () => _moChonKhachSan(
+                targetRoute: '/post-room',
+                title: 'Chọn khách sạn để đăng phòng',
+              ),
+            ),
+            _tileMock(
+              title: 'Quản lý phòng',
+              subtitle: 'Chỉnh sửa & cập nhật',
+              imageUrl:
+              'https://images.unsplash.com/photo-1560067174-8943bd8f8d23?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.manage,
+              onTap: () => _moChonKhachSan(
+                targetRoute: '/manage-rooms',
+                title: 'Chọn khách sạn để quản lý phòng',
+              ),
+            ),
+            _tileMock(
+              title: 'Thống kê',
+              subtitle: 'Báo cáo chi tiết',
+              imageUrl:
+              'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.stats,
+              onTap: () => Navigator.of(context).pushNamed('/revenue-stats'),
+            ),
+            _tileMock(
+              title: 'Đánh giá',
+              subtitle: 'Xem phản hồi khách',
+              imageUrl:
+              'https://images.unsplash.com/photo-1522071901873-411886a10004?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.reviews,
+              onTap: () => Navigator.of(context).pushNamed('/reviews'),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  // -------------------------
-  // ADMIN
-  // -------------------------
-  Widget _bangDieuKhienAdmin(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _mucBangDieuKhien(
-          icon: AppIcons.approve,
-          tieuDe: 'Duyệt phòng',
-          moTa: 'Phê duyệt các phòng chờ đăng',
-          onTap: () => Navigator.of(context).pushNamed('/approve-rooms'),
-        ),
-        _mucBangDieuKhien(
-          icon: AppIcons.manage,
-          tieuDe: 'Quản lý phòng',
-          moTa: 'Xem / sửa / xoá tất cả phòng',
-          // ✅ FIX: admin cũng cần chọn khách sạn (vì route /manage-rooms yêu cầu hotelId)
-          onTap: () => _moChonKhachSan(
-            targetRoute: '/manage-rooms',
-            title: 'Chọn khách sạn để quản lý phòng',
-          ),
-        ),
-        _mucBangDieuKhien(
-          icon: AppIcons.reports,
-          tieuDe: 'Báo cáo',
-          moTa: 'Xem báo cáo vi phạm từ người dùng',
-          onTap: () => Navigator.of(context).pushNamed('/reports'),
-        ),
-        _mucBangDieuKhien(
-          icon: AppIcons.monitorBookings,
-          tieuDe: 'Theo dõi đặt phòng',
-          moTa: 'Xem tất cả đơn đặt phòng',
-          onTap: () => Navigator.of(context).pushNamed('/monitor-bookings'),
-        ),
+  Widget _segmentedOwnerGuest(UserModel user) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final activeRole = themeProvider.currentRole ?? user.primaryRole;
+
+    final hasOwner = user.switchableRoles.contains(UserRole.hotelOwner);
+    final hasUser = user.switchableRoles.contains(UserRole.user);
+    if (!hasOwner || !hasUser) return const SizedBox.shrink();
+
+    return SegmentedButton<UserRole>(
+      segments: const [
+        ButtonSegment<UserRole>(value: UserRole.hotelOwner, label: Text('Chủ nhà')),
+        ButtonSegment<UserRole>(value: UserRole.user, label: Text('Khách')),
       ],
-    );
-  }
-
-  Widget _mucBangDieuKhien({
-    required IconData icon,
-    required String tieuDe,
-    required String moTa,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Card(
-      color: cs.surface,
-      elevation: isDark ? 0 : 2,
-      margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
-        ),
+      selected: {activeRole == UserRole.user ? UserRole.user : UserRole.hotelOwner},
+      onSelectionChanged: (set) => _doiCheDo(user, set.first),
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
       ),
-      child: ListTile(
-        contentPadding:
-        const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-        leading: Icon(icon, size: 40, color: cs.secondary),
-        title: Text(
-          tieuDe,
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 16,
-            color: cs.onSurface,
+    );
+  }
+
+  Widget _blueWelcomeBanner({required String title, required String subtitle}) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.primary,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: cs.onPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: cs.onPrimary.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ]),
           ),
-        ),
-        subtitle: Text(
-          moTa,
-          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.65)),
-        ),
-        trailing: Icon(
-          AppIcons.chevron,
-          size: 22,
-          color: cs.onSurface.withValues(alpha: 0.55),
-        ),
-        onTap: onTap,
+          const SizedBox(width: 10),
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(Icons.grid_view_rounded, color: cs.onPrimary, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statMiniMock({
+    required IconData icon,
+    required String label,
+    required String value,
+    String? suffix,
+    Color? tint,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: (tint ?? cs.primary).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: tint ?? cs.primary, size: 18),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onSurface.withValues(alpha: 0.65),
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                ),
+              ),
+              if (suffix != null) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(
+                    suffix,
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.55),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+              ]
+            ],
+          ),
+        ],
       ),
     );
   }
 
   // =========================
-  // Bottom Navigation
+  // ADMIN DASH (match mockup)
+  // =========================
+  Widget _bangDieuKhienAdmin(BuildContext context, {required UserModel user}) {
+    final cs = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _miniSquareStat(
+                icon: Icons.hourglass_bottom_rounded,
+                label: 'Chờ duyệt',
+                value: '12',
+                tint: const Color(0xFFF2994A),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: _bigPrimaryStat(
+                label: 'Đặt phòng',
+                value: '85',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniSquareStat(
+                icon: Icons.trending_up_rounded,
+                label: 'Tăng',
+                value: '+5.2%',
+                tint: const Color(0xFF27AE60),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              'Chức năng quản lý',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(width: 6, height: 6, decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.05,
+          children: [
+            _tileMock(
+              title: 'Duyệt phòng',
+              subtitle: 'Phê duyệt nhanh',
+              imageUrl:
+              'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.approve,
+              onTap: () => Navigator.of(context).pushNamed('/approve-rooms'),
+            ),
+            _tileMock(
+              title: 'Quản lý phòng',
+              subtitle: 'Cập nhật trạng thái',
+              badge: 'NEW',
+              imageUrl:
+              'https://images.unsplash.com/photo-1560067174-8943bd8f8d23?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.manage,
+              onTap: () => _moChonKhachSan(
+                targetRoute: '/manage-rooms',
+                title: 'Chọn khách sạn để quản lý phòng',
+              ),
+            ),
+            _tileMock(
+              title: 'Báo cáo',
+              subtitle: 'Thống kê chi tiết',
+              imageUrl:
+              'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.reports,
+              onTap: () => Navigator.of(context).pushNamed('/reports'),
+            ),
+            _tileMock(
+              title: 'Theo dõi',
+              subtitle: 'Lịch trình hiện tại',
+              imageUrl:
+              'https://images.unsplash.com/photo-1522071901873-411886a10004?auto=format&fit=crop&w=900&q=70',
+              icon: AppIcons.monitorBookings,
+              onTap: () => Navigator.of(context).pushNamed('/monitor-bookings'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _miniSquareStat({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color tint,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: tint, size: 18),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bigPrimaryStat({required String label, required String value}) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.primary,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.event_available_rounded, color: cs.onPrimary, size: 18),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              color: cs.onPrimary.withValues(alpha: 0.9),
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              color: cs.onPrimary,
+              fontWeight: FontWeight.w900,
+              fontSize: 24,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tileMock({
+    required String title,
+    required String subtitle,
+    required String imageUrl,
+    required IconData icon,
+    required VoidCallback onTap,
+    String? badge,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _anhLoi(),
+                    ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: cs.surface.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(icon, color: cs.primary, size: 18),
+                      ),
+                    ),
+                    if (badge != null)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: cs.primary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            badge,
+                            style: TextStyle(
+                              color: cs.onPrimary,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: cs.onSurface,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: cs.onSurface.withValues(alpha: 0.6),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // Bottom Navigation (giữ route cũ)
   // =========================
   Widget _thanhDieuHuongDuoi(UserRole role) {
-    if (role == UserRole.user) {
+    final cs = Theme.of(context).colorScheme;
+
+    BottomNavigationBar bar(List<BottomNavigationBarItem> items) {
       return BottomNavigationBar(
         currentIndex: _chiMucDuoi,
         onTap: (i) => _chonTab(role, i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(AppIcons.home), label: 'Trang chủ'),
-          BottomNavigationBarItem(icon: Icon(AppIcons.search), label: 'Tìm kiếm'),
-          BottomNavigationBarItem(
-              icon: Icon(AppIcons.bookings), label: 'Đặt phòng'),
-          BottomNavigationBarItem(icon: Icon(AppIcons.profile), label: 'Cá nhân'),
-        ],
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: cs.primary,
+        unselectedItemColor: cs.onSurface.withValues(alpha: 0.55),
+        showUnselectedLabels: true,
+        items: items,
       );
+    }
+
+    if (role == UserRole.user) {
+      return bar(const [
+        BottomNavigationBarItem(icon: Icon(AppIcons.home), label: 'Trang chủ'),
+        BottomNavigationBarItem(icon: Icon(AppIcons.search), label: 'Tìm kiếm'),
+        BottomNavigationBarItem(icon: Icon(AppIcons.bookings), label: 'Đặt phòng'),
+        BottomNavigationBarItem(icon: Icon(AppIcons.profile), label: 'Tài khoản'),
+      ]);
     }
 
     if (role == UserRole.hotelOwner) {
-      return BottomNavigationBar(
-        currentIndex: _chiMucDuoi,
-        onTap: (i) => _chonTab(role, i),
-        items: const [
-          BottomNavigationBarItem(
-              icon: Icon(AppIcons.dashboard), label: 'Tổng quan'),
-          BottomNavigationBarItem(icon: Icon(AppIcons.rooms), label: 'Phòng'),
-          BottomNavigationBarItem(icon: Icon(AppIcons.chat), label: 'Tin nhắn'),
-          BottomNavigationBarItem(icon: Icon(AppIcons.profile), label: 'Cá nhân'),
-        ],
-      );
+      return bar(const [
+        BottomNavigationBarItem(icon: Icon(AppIcons.dashboard), label: 'Trang chủ'),
+        BottomNavigationBarItem(icon: Icon(AppIcons.rooms), label: 'Phòng'),
+        BottomNavigationBarItem(icon: Icon(AppIcons.chat), label: 'Tin nhắn'),
+        BottomNavigationBarItem(icon: Icon(AppIcons.profile), label: 'Hồ sơ'),
+      ]);
     }
 
-    return BottomNavigationBar(
-      currentIndex: _chiMucDuoi,
-      onTap: (i) => _chonTab(role, i),
-      items: const [
-        BottomNavigationBarItem(
-            icon: Icon(AppIcons.dashboard), label: 'Tổng quan'),
-        BottomNavigationBarItem(icon: Icon(AppIcons.approve), label: 'Duyệt'),
-        BottomNavigationBarItem(icon: Icon(AppIcons.reports), label: 'Báo cáo'),
-        BottomNavigationBarItem(icon: Icon(AppIcons.settings), label: 'Cài đặt'),
-      ],
-    );
+    return bar(const [
+      BottomNavigationBarItem(icon: Icon(AppIcons.dashboard), label: 'Trang chủ'),
+      BottomNavigationBarItem(icon: Icon(AppIcons.approve), label: 'Duyệt'),
+      BottomNavigationBarItem(icon: Icon(AppIcons.reports), label: 'Báo cáo'),
+      BottomNavigationBarItem(icon: Icon(AppIcons.profile), label: 'Hồ sơ'),
+    ]);
   }
 
   // =========================

@@ -1,16 +1,32 @@
+import 'dart:typed_data';
+
 import 'package:booking_app/providers/hotel_providers.dart';
+import 'package:booking_app/widgets/ui/app_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 class AddReviewScreen extends StatefulWidget {
-  final String roomId;
-  final String hotelId;
-
   const AddReviewScreen({
     super.key,
     required this.roomId,
     required this.hotelId,
+    this.hotelName,
+    this.roomLabel,
+    this.stayNights,
+    this.thumbnailUrl,
   });
+
+  static const routeName = '/add-review';
+
+  final String roomId;
+  final String hotelId;
+
+  // UI-only
+  final String? hotelName;
+  final String? roomLabel;
+  final int? stayNights;
+  final String? thumbnailUrl;
 
   @override
   State<AddReviewScreen> createState() => _AddReviewScreenState();
@@ -20,7 +36,16 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
   final _formKey = GlobalKey<FormState>();
   final _binhLuanCtrl = TextEditingController();
 
-  double _soSao = 3.0;
+  double _soSao = 4.0;
+  final Set<String> _highlights = <String>{};
+  final List<Uint8List> _photos = [];
+
+  static const _presetHighlights = <String>[
+    'Sạch sẽ',
+    'Dịch vụ',
+    'Vị trí',
+    'Tiện nghi',
+  ];
 
   @override
   void dispose() {
@@ -36,12 +61,40 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
           noiDung,
           style: TextStyle(
             color: laLoi ? cs.onErrorContainer : cs.onTertiaryContainer,
+            fontWeight: FontWeight.w600,
           ),
         ),
         behavior: SnackBarBehavior.floating,
         backgroundColor: laLoi ? cs.errorContainer : cs.tertiaryContainer,
       ),
     );
+  }
+
+  String _labelFromStars(double v) {
+    final s = v.round();
+    if (s >= 5) return 'Tuyệt vời';
+    if (s == 4) return 'Rất tốt';
+    if (s == 3) return 'Tốt';
+    if (s == 2) return 'Tạm ổn';
+    return 'Chưa hài lòng';
+  }
+
+  Future<void> _pickPhotos() async {
+    try {
+      final picker = ImagePicker();
+      final files = await picker.pickMultiImage(imageQuality: 85);
+      if (files.isEmpty) return;
+
+      for (final f in files) {
+        if (_photos.length >= 5) break;
+        final bytes = await f.readAsBytes();
+        _photos.add(bytes);
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (!mounted) return;
+      _thongBao('Không thể chọn ảnh. Vui lòng thử lại.', laLoi: true);
+    }
   }
 
   Future<void> _guiDanhGia() async {
@@ -54,7 +107,6 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final hotelProvider = context.read<HotelProvider>();
-
     try {
       await hotelProvider.addReview(
         roomId: widget.roomId,
@@ -79,152 +131,242 @@ class _AddReviewScreenState extends State<AddReviewScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+
+    final hotelText = (widget.hotelName ?? '').trim().isNotEmpty
+        ? widget.hotelName!.trim()
+        : 'Khách sạn';
+    final roomText = (widget.roomLabel ?? '').trim().isNotEmpty
+        ? widget.roomLabel!.trim()
+        : 'Phòng';
+    final nights = widget.stayNights;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Viết đánh giá'),
+      appBar: AppBar(title: const Text('Viết đánh giá')),
+      bottomNavigationBar: Consumer<HotelProvider>(
+        builder: (context, p, _) => AppBottomPrimaryButton(
+          text: 'Gửi đánh giá',
+          isLoading: p.isLoading,
+          onPressed: p.isLoading ? null : _guiDanhGia,
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Card(
-                color: cs.surface,
-                elevation: isDark ? 0 : 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  side: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.6),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Bạn cảm thấy thế nào về phòng này?',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: cs.onSurface,
-                        ),
-                        textAlign: TextAlign.center,
+              AppCard(
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SizedBox(
+                        width: 70,
+                        height: 70,
+                        child: (widget.thumbnailUrl ?? '').trim().isNotEmpty
+                            ? Image.network(
+                          widget.thumbnailUrl!.trim(),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _thumbFallback(cs),
+                        )
+                            : _thumbFallback(cs),
                       ),
-
-                      const SizedBox(height: 14),
-
-                      // ⭐ chọn sao
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(5, (index) {
-                          final active = index < _soSao;
-                          return IconButton(
-                            tooltip: 'Chọn ${index + 1} sao',
-                            icon: Icon(
-                              active ? Icons.star : Icons.star_border,
-                              color: cs.secondary,
-                              size: 40,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            hotelText,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16.5,
+                              color: cs.onSurface,
                             ),
-                            onPressed: () => setState(
-                                  () => _soSao = (index + 1).toDouble(),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            nights == null
+                                ? roomText
+                                : '$roomText - $nights đêm',
+                            style: TextStyle(
+                              color: cs.onSurface.withValues(alpha: 0.7),
+                              fontWeight: FontWeight.w700,
                             ),
-                          );
-                        }),
-                      ),
-
-                      const SizedBox(height: 6),
-
-                      // Badge số sao
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: cs.secondary.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: cs.secondary.withValues(alpha: 0.35)),
-                        ),
-                        child: Text(
-                          'Số sao đã chọn: ${_soSao.toInt()}/5',
-                          style: TextStyle(
-                            color: cs.secondary,
-                            fontWeight: FontWeight.w900,
                           ),
-                        ),
+                        ],
                       ),
-
-                      const SizedBox(height: 18),
-
-                      // 📝 bình luận
-                      TextFormField(
-                        controller: _binhLuanCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'Bình luận của bạn',
-                          hintText: 'Ví dụ: Phòng sạch sẽ, nhân viên thân thiện…',
-                          alignLabelWithHint: true,
-                          prefixIcon: const Icon(Icons.chat_bubble_outline),
-                          suffixIcon: _binhLuanCtrl.text.trim().isEmpty
-                              ? null
-                              : IconButton(
-                            tooltip: 'Xóa',
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _binhLuanCtrl.clear();
-                              setState(() {});
-                            },
-                          ),
-                        ),
-                        maxLines: 5,
-                        onChanged: (_) => setState(() {}),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Vui lòng nhập bình luận';
-                          }
-                          if (value.trim().length < 5) {
-                            return 'Bình luận quá ngắn (tối thiểu 5 ký tự).';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 22),
+              Center(
+                child: Text(
+                  'Bạn cảm thấy kỳ nghỉ thế nào?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
-              SizedBox(
-                width: double.infinity,
-                child: Consumer<HotelProvider>(
-                  builder: (context, provider, _) {
-                    return ElevatedButton.icon(
-                      onPressed: provider.isLoading ? null : _guiDanhGia,
-                      icon: provider.isLoading
-                          ? SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.onPrimary,
-                        ),
-                      )
-                          : const Icon(Icons.send),
-                      label: Text(provider.isLoading ? 'Đang gửi…' : 'Gửi đánh giá'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final active = i < _soSao.round();
+                    return IconButton(
+                      onPressed: () => setState(() => _soSao = (i + 1).toDouble()),
+                      icon: Icon(
+                        active ? Icons.star : Icons.star_border,
+                        color: active ? Colors.amber : cs.outlineVariant,
+                        size: 44,
                       ),
+                      tooltip: 'Chọn ${i + 1} sao',
                     );
-                  },
+                  }),
                 ),
               ),
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  _labelFromStars(_soSao),
+                  style: TextStyle(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+              Text(
+                'Điều gì nổi bật nhất?',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: cs.onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _presetHighlights.map((t) {
+                  final selected = _highlights.contains(t);
+                  return ChoiceChip(
+                    selected: selected,
+                    label: Text(
+                      t,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: selected ? cs.primary : cs.onSurface,
+                      ),
+                    ),
+                    selectedColor: cs.primary.withValues(alpha: 0.12),
+                    backgroundColor: cs.surface,
+                    side: BorderSide(
+                      color: selected
+                          ? cs.primary.withValues(alpha: 0.6)
+                          : cs.outlineVariant.withValues(alpha: 0.55),
+                    ),
+                    onSelected: (v) {
+                      setState(() {
+                        if (v) {
+                          _highlights.add(t);
+                        } else {
+                          _highlights.remove(t);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 18),
+              Text(
+                'Chi tiết đánh giá',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _binhLuanCtrl,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  hintText:
+                  'Hãy chia sẻ trải nghiệm của bạn... Bạn thích (hoặc không thích) điều gì về khách sạn này?',
+                  alignLabelWithHint: true,
+                ),
+                validator: (v) {
+                  final s = (v ?? '').trim();
+                  if (s.isEmpty) return 'Vui lòng nhập bình luận';
+                  if (s.length < 5) return 'Bình luận quá ngắn (tối thiểu 5 ký tự).';
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Text(
+                    'Thêm ảnh',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '(Tùy chọn)',
+                    style: TextStyle(
+                      color: cs.onSurface.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  AppAddPhotoTile(onTap: _pickPhotos),
+                  ..._photos.asMap().entries.map((e) {
+                    return AppImageThumb(
+                      bytes: e.value,
+                      onRemove: () => setState(() => _photos.removeAt(e.key)),
+                    );
+                  }),
+                ],
+              ),
+
+              const SizedBox(height: 90),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _thumbFallback(ColorScheme cs) {
+    return Container(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+      alignment: Alignment.center,
+      child: Icon(Icons.photo, color: cs.onSurfaceVariant, size: 28),
     );
   }
 }
